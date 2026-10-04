@@ -143,10 +143,9 @@ type Node = { type: string; props?: Record<string, unknown>; hover?: Record<stri
 const textOf = (n: unknown): string =>
   typeof n === 'string' ? n : n && typeof n === 'object' ? ((n as Node).children ?? []).map(textOf).join(' ') : ''
 
-// A tab box is [card spacer, letter row]; the dot is the letter row's first child.
+// A tab box is [dot, letter, popup]; the dot is its first child.
 const dot = async (ui: Ui, id: string) => {
-  const row = (await ui.find({ key: `tab:${id}` }))?.children[1] as Node | undefined
-  const first = (row?.children ?? [])[0] as Node | undefined
+  const first = (await ui.find({ key: `tab:${id}` }))?.children[0] as Node | undefined
   return { text: textOf(first), color: first?.props?.color }
 }
 
@@ -175,7 +174,7 @@ for (const surface of SURFACES) {
     }
   })
 
-  test(`[${surface}] 1b. each tab holds a tall card that shows on hover, with room reserved so it never clips`, { plugins: PEERS }, async ($, on) => {
+  test(`[${surface}] 1b. hovering a tab shows its card as a popup floating above the letter`, { plugins: PEERS }, async ($, on) => {
     world(on)
     await $.session.start({ cwd: 'C:/x/gcdAtlas', surface, isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'mod-hub', surface, component: 'AbovePrompt', props: BAND_PROPS })
@@ -189,20 +188,22 @@ for (const surface of SURFACES) {
       }
     }
     walk(tree)
-    // A tab box holds [spacer, letter row]; the spacer is hidden until the tab is
-    // hovered and holds the card (absolute, hanging left from the tab's right edge).
-    const spacerFor = (id: string) => (nodes.find(n => n.props?.key === `tab:${id}`)?.children ?? [])[0] as Node | undefined
-    const cardFor = (id: string) => (spacerFor(id)?.children ?? [])[0] as Node | undefined
+    // A tab box holds [dot, letter, popup]: the popup is hidden until the tab is hovered,
+    // then floats above the letter (absolute, so the dock keeps its one line).
+    const popupFor = (id: string) => {
+      const kids = nodes.find(n => n.props?.key === `tab:${id}`)?.children ?? []
+      return kids[kids.length - 1] as Node | undefined
+    }
+    const cardFor = (id: string) => (popupFor(id)?.children ?? [])[0] as Node | undefined
     for (const id of ['plan', 'next', 'coach', 'prs', 'mods']) {
-      const spacer = spacerFor(id)
-      expect(spacer?.props?.display).toBe('none')
-      expect(spacer?.hover?.display).toBe('flex')
-      // It reserves the card's height (so nothing clips) but only one cell of width.
-      expect(spacer?.props?.width).toBe(1)
-      expect(spacer?.props?.height as number).toBeGreaterThan(3)
+      const popup = popupFor(id)
+      expect(popup?.props?.display).toBe('none')
+      expect(popup?.hover?.display).toBe('flex')
+      expect(popup?.props?.position).toBe('absolute')
+      expect(popup?.props?.right).toBe(0)
+      expect(popup?.props?.top as number).toBeLessThan(-3)
       const card = cardFor(id)
-      expect(card?.props?.position).toBe('absolute')
-      expect(card?.props?.right).toBe(0)
+      expect(card?.props?.width).toBe(56)
       expect(card?.props?.borderStyle).toBe('round')
     }
     expect(textOf(cardFor('plan'))).toMatch(/Earth phase 2.*64 ?%.*step 3\/5.*~8m left.*Now: +wiring the tile streamer/)
@@ -238,10 +239,19 @@ for (const surface of SURFACES) {
     expect(status?.props.flexDirection).toBe('row')
     expect(status?.props.flexShrink).toBe(1)
     expect(buttons?.props.flexShrink).toBe(0)
-    // The status side's texts cut off with "…" rather than wrap.
-    for (const t of ((status?.children ?? []) as Node[]).filter(n => n.type === 'Text')) {
-      expect(t.props?.wrap).toBe('truncate-end')
+    // The bar and numbers never shrink; only the "now" text gives way, cut off with "…".
+    const nodesIn = (n: unknown, out: Node[] = []): Node[] => {
+      if (n && typeof n === 'object') {
+        out.push(n as Node)
+        for (const c of (n as Node).children ?? []) nodesIn(c, out)
+      }
+      return out
     }
+    const all = nodesIn(await ui.drawn())
+    expect(all.find(n => n.props?.key === 'dock:progress')?.props?.flexShrink).toBe(0)
+    const nowBox = all.find(n => n.props?.key === 'dock:now')
+    expect(nowBox?.props?.flexShrink).toBe(1)
+    expect(((nowBox?.children ?? [])[0] as Node | undefined)?.props?.wrap).toBe('truncate-end')
   })
 
   test(`[${surface}] 3b. ▾ folds the whole dock to one chip and ◆ ▸ brings it back`, { plugins: PEERS }, async ($, on) => {
@@ -279,6 +289,7 @@ test('4a. the dock shows the running task, then a done chip', { plugins: PEERS }
   world(on)
   await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: BAND_PROPS })
-  expect((await ui.find({ type: 'Text', text: /^◎ 64%/ }))?.text).toMatch(/◎ 64% [⣀-⣿]{7} 3\/5 ~8m/)
+  expect(await ui.find({ type: 'Text', text: '64%' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^3\/5/ }))?.text).toMatch(/^3\/5 · ~8m$/)
   expect(await ui.find({ type: 'Text', text: /wiring the tile streamer/ })).toBeDefined()
 })

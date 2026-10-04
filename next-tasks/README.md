@@ -5,11 +5,11 @@
 **Where you see it:** after any turn of 1 minute or more, a small card opens above the dock once, with a blank line between it and the dock:
 ```
 Next                                   ✕
-1  Add a seam test for tiles
-2  Write an ADR: tiles in repo vs R2
-3  Profile far-tile blits
+[1] Add a seam test for tiles
+[2] Write an ADR: tiles in repo vs R2
+[3] Profile far-tile blits
 ```
-- **Click a line** (or press its number with the dock focused) to do that task: its full instruction goes into your prompt box, or is sent where the app has no box it can fill.
+- **Click the boxed number or the task** to do it: its full instruction goes into your prompt box, or is sent where the app has no box it can fill.
 - **✕** dismisses the suggestions.
 - The card folds into the dock's **Next·3** button when you send your next prompt; click that to reopen it. Suggestions expire after 3 of your prompts.
 - **`/next`** asks over the whole conversation instead of the last turn: smarter, any time.

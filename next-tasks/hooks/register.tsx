@@ -177,7 +177,6 @@ export const register: Register = on => {
     if (!c || !c.isOpen || (await $.state.get(DOCK_FOLDED)).value === true) return next(e)
     const below = await next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
-    const isTerminal = e.surface === 'terminal'
     return (
       <Box flexDirection="column">
         <Box key="next:card" flexDirection="column" marginBottom={1}>
@@ -189,15 +188,13 @@ export const register: Register = on => {
             <Button key="dismiss" label="✕" plain onPress={() => update($, card, () => null)} />
           </Box>
           {c.error !== null && <Text color="warning">Could not suggest: {c.error}</Text>}
-          {c.items.map((item, i) =>
-            // The terminal draws the shortcut as "1: title"; the desktop draws it as a
-            // second number badge, so there the number lives in the label alone.
-            isTerminal ? (
-              <Button key={`do:${i}`} label={item.title} hotkey={String(i + 1)} plain onPress={() => take($, item)} />
-            ) : (
-              <Button key={`do:${i}`} label={`${i + 1}  ${item.title}`} plain onPress={() => take($, item)} />
-            ),
-          )}
+          {c.items.map((item, i) => (
+            // A bordered number and the task, one line; either one does the task.
+            <Box key={`row:${i}`} flexDirection="row" gap={1} alignItems="center">
+              <Button key={`num:${i}`} label={String(i + 1)} onPress={() => take($, item)} />
+              <Button key={`do:${i}`} label={item.title} plain onPress={() => take($, item)} />
+            </Box>
+          ))}
         </Box>
         {below}
       </Box>

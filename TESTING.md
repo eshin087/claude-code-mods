@@ -4,7 +4,7 @@ Two layers:
 - **Automated tests:** run in Claude Code's plugin test runner, with a simulated app and clock. They check the logic.
 - **Manual checklist:** the things only a real window can show, like whether the dock fits on one line at your width, how keys and focus behave in the desktop app, and where panels open.
 
-Last run: **2026-10-03, Claude Code 2.1.286. 37 automated tests, 37 pass.**
+Last run: **2026-10-04, Claude Code 2.1.286. 38 automated tests, 38 pass.**
 
 ## Running the automated tests
 
@@ -19,7 +19,7 @@ foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage
 |---|---|---|
 | mod-hub | `tests/dock.test.tsx` | 14 (most run on both terminal and desktop) |
 | mission-control | `tests/progress.test.tsx` | 5 |
-| next-tasks | `tests/card.test.tsx` | 9 |
+| next-tasks | `tests/card.test.tsx` | 10 |
 | coach | `tests/toggle.test.tsx` | 4 |
 | pr-desk | `tests/toggle.test.tsx` | 1 |
 | usage-meter | `tests/meter.test.tsx` | 4 |
@@ -94,6 +94,8 @@ Found while writing and running these tests on 2026-10-03.
 | B14 | High | **Hover cards didn't show on desktop.** They were revealed through a hover group from another spot in the band, which the desktop app doesn't support. | Fixed: each card lives inside its letter's own box (which the desktop does hover), with a hidden spacer that reserves the card's height so nothing clips | dock 1b; hover itself is manual |
 | B15 | Medium | **Next-task rows showed their number twice on desktop** (the label's number plus a shortcut badge). | Fixed: no shortcut badge on desktop | next-tasks layout test |
 | B16 | Medium | **Footer bars looked broken up.** Bar characters left visible gaps, and the slot clipped long text. | Fixed: on desktop the footer is one 145 px SVG with solid rounded bars and a tooltip; text bars on the terminal | meter tests |
+| B17 | Medium | **Dock progress was cut off.** The bar, step and time shared one shrinking text with the "now" line, so the numbers were trimmed first. | Fixed: the solid bar, %, step and time never shrink; only the "now" text is trimmed | dock 3a |
+| B18 | Low | **Hover cards grew the whole dock.** The card's reserved space made the dock look like a big window. | Fixed: the card floats above the letter as a popup and the dock stays one line | dock 1b |
 | B8 | Low | **Old suggestions lingered.** `Next·3` stayed in the dock forever after a long turn. | Fixed: suggestions expire after 3 of your prompts | next-tasks "3 prompts later" |
 
 ### Known limits (not bugs, but worth knowing)

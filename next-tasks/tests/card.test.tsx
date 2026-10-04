@@ -116,29 +116,41 @@ test('3. while the dock is folded the card is not drawn', { plugins: [DOCK, PROB
   expect(await ui.find({ key: 'do:0' })).toBeUndefined()
 })
 
-test('the card is one numbered line per task, and ✕ clears it', { plugins: [PROBE] }, async ($, on) => {
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`[${surface}] the card is one line per task: a bordered number and the task; ✕ clears it`, { plugins: [PROBE] }, async ($, on) => {
+    const clock = world(on)
+    await $.session.start({ cwd: 'C:/x/gcdAtlas', surface, isInteractive: true })
+    await longTurn($, clock, 90_000)
+    const ui = await $.ui.mount({ plugin: 'next-tasks', surface, component: 'AbovePrompt', props: BAND_PROPS })
+    for (const [i, title] of ['Add a seam test', 'Write an ADR', 'Profile far tiles'].entries()) {
+      const num = await ui.find({ key: `num:${i}` })
+      expect(num?.props.label).toBe(String(i + 1))
+      expect(num?.props.plain).toBeUndefined()
+      expect(num?.props.hotkey).toBeUndefined()
+      const task = await ui.find({ key: `do:${i}` })
+      expect(task?.props.label).toBe(title)
+      expect(task?.props.plain).toBe(true)
+    }
+    expect((await ui.find({ key: 'dismiss' }))?.props.label).toBe('✕')
+    await ui.press({ key: 'dismiss' })
+    expect(await peek($)).toBe(null)
+    expect(await ui.find({ key: 'do:0' })).toBeUndefined()
+  })
+}
+
+test('pressing a bordered number does that task', { plugins: [PROBE] }, async ($, on) => {
   const clock = world(on)
+  let sent = ''
+  on('prompt.fill', ($, e) => {
+    sent = e.text
+    return { value: { isFilled: true } }
+  })
   await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
   await longTurn($, clock, 90_000)
   const ui = await $.ui.mount({ plugin: 'next-tasks', surface: 'desktop', component: 'AbovePrompt', props: BAND_PROPS })
-  const rows = (await ui.findAll({ type: 'Button' })).filter(b => String(b.key).startsWith('do:')).map(b => b.props.label)
-  expect(rows).toEqual(['1  Add a seam test', '2  Write an ADR', '3  Profile far tiles'])
-  // No shortcut on the desktop: it would draw a second number badge beside the label.
-  expect((await ui.find({ key: 'do:0' }))?.props.hotkey).toBeUndefined()
-  expect((await ui.find({ key: 'dismiss' }))?.props.label).toBe('✕')
-  await ui.press({ key: 'dismiss' })
+  await ui.press({ key: 'num:1' })
+  expect(sent).toBe('Draft an ADR for tiles in repo vs R2.')
   expect(await peek($)).toBe(null)
-  expect(await ui.find({ key: 'do:0' })).toBeUndefined()
-})
-
-test('on the terminal the number comes from the shortcut key, not the label', { plugins: [PROBE] }, async ($, on) => {
-  const clock = world(on)
-  await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'terminal', isInteractive: true })
-  await longTurn($, clock, 90_000)
-  const ui = await $.ui.mount({ plugin: 'next-tasks', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS })
-  const first = await ui.find({ key: 'do:0' })
-  expect(first?.props.label).toBe('Add a seam test')
-  expect(first?.props.hotkey).toBe('1')
 })
 
 test('a card left loading by a reload is cleared when the mod loads again', { plugins: [PROBE] }, async ($, on) => {

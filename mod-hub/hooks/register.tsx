@@ -39,14 +39,6 @@ const ACCENT = { plan: '#22d3ee', next: '#facc15', coach: '#a78bfa', prs: '#4ade
 const TRACK = '#3f3f46'
 const COACH_TIP = { plugin: 'coach', key: 'lastTip' } as const
 
-const LEVELS = [0xc0, 0xc4, 0xc6, 0xc7, 0xe7, 0xf7, 0xff].map(mask => String.fromCharCode(0x2800 + mask))
-const braille = (pct: number, cells: number) => {
-  const steps = Math.round(Math.max(0, Math.min(1, pct)) * cells * 6)
-  let bar = ''
-  for (let i = 0; i < cells; i++) bar += LEVELS[Math.max(0, Math.min(6, steps - i * 6))]
-  return bar
-}
-
 const fmt = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return `${s}s`
@@ -184,7 +176,7 @@ export const register: Register = on => {
 
   // The dock: one line, closest to the prompt. Each tab is one bordered letter
   // with a dot (green: its panel is open; amber: something new). Hovering a tab
-  // shows its card above it; the band grows to fit the card.
+  // shows its card as a popup above it.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const elements = $.ui.resolve(e)
@@ -222,23 +214,20 @@ export const register: Register = on => {
     const prBad = (desk?.prs ?? []).filter(p => p.checks === 'failing' || p.mergeable === 'CONFLICTING')
     const now = await $.clock.now()
 
-    // A tab: its letter (with the dot) at the bottom, and above it a hidden spacer
-    // that holds the hover card. The desktop applies hover inside the hovered keyed
-    // Box, so the card lives there; the spacer reserves the card's height when shown,
-    // so the band grows to fit instead of clipping it, while its 1-cell width keeps
-    // the other tabs still. The card itself hangs left from the tab's right edge.
+    // A tab: the dot and its letter, plus its hover card. The card is hidden until the
+    // tab is hovered, then floats above the letter as a popup over the chat (absolute,
+    // so the dock keeps its one line). It lives inside the tab's keyed Box because
+    // that is where the desktop applies hover; it hangs left from the tab's right edge.
     const tab = (id: string, letter: string, hotkey: string, isTabOpen: boolean, isNew: boolean, press: () => unknown, card: RenderElement, rows: number) => (
-      <Box key={`tab:${id}`} flexDirection="column" alignItems="flex-end">
-        <Box display="none" hover={{ display: 'flex' }} width={1} height={rows} position="relative">
+      <Box key={`tab:${id}`} flexDirection="row" position="relative">
+        <Text color={isTabOpen ? 'success' : isNew ? 'warning' : undefined}>{isTabOpen || isNew ? '●' : ' '}</Text>
+        {isTerminal ? (
+          <Button key={`dock:${id}`} label={letter} hotkey={hotkey} onPress={press} />
+        ) : (
+          <Button key={`dock:${id}`} label={letter} onPress={press} />
+        )}
+        <Box display="none" hover={{ display: 'flex' }} position="absolute" right={0} top={-(rows + 1)}>
           {card}
-        </Box>
-        <Box flexDirection="row">
-          <Text color={isTabOpen ? 'success' : isNew ? 'warning' : undefined}>{isTabOpen || isNew ? '●' : ' '}</Text>
-          {isTerminal ? (
-            <Button key={`dock:${id}`} label={letter} hotkey={hotkey} onPress={press} />
-          ) : (
-            <Button key={`dock:${id}`} label={letter} onPress={press} />
-          )}
         </Box>
       </Box>
     )
@@ -246,9 +235,6 @@ export const register: Register = on => {
     // A hover card: a framed card in its tab's color.
     const tip = (id: keyof typeof ACCENT, title: string, body: RenderElement) => (
       <Box
-        position="absolute"
-        right={0}
-        top={0}
         width={56}
         flexDirection="column"
         borderStyle="round"
@@ -451,22 +437,29 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {below}
-        <Box flexDirection="row" gap={1} flexWrap="nowrap" alignItems="flex-end">
-          <Box key="dock:status" flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+        <Box flexDirection="row" gap={1} flexWrap="nowrap" alignItems="center">
+          <Box key="dock:status" flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden" alignItems="center">
             {mission && !mission.isFinished && (
-              <Text color="claude" wrap="truncate-end">
-                ◎ {Math.round(mission.pct * 100)}% {braille(mission.pct, 7)} {mission.stepNo}/{mission.total}
-                {mission.left ? ` ${mission.left}` : ''}
-              </Text>
+              <Box key="dock:progress" flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+                <Text color={ACCENT.plan}>◎</Text>
+                {meter(mission.pct, 10, ACCENT.plan)}
+                <Text bold>{Math.round(mission.pct * 100)}%</Text>
+                <Text dimColor>
+                  {mission.stepNo}/{mission.total}
+                  {mission.left ? ` · ${mission.left}` : ''}
+                </Text>
+              </Box>
             )}
             {mission && !mission.isFinished && mission.now !== '' && (
-              <Text dimColor wrap="truncate-end">
-                — {mission.now}
-              </Text>
+              <Box key="dock:now" flexShrink={1} minWidth={0}>
+                <Text dimColor wrap="truncate-end">
+                  {mission.now}
+                </Text>
+              </Box>
             )}
             {mission && mission.isFinished && <Text color="success">✓ done {fmt(mission.elapsedMs)}</Text>}
           </Box>
-          <Box key="dock:buttons" flexDirection="row" gap={1} flexShrink={0} alignItems="flex-end">
+          <Box key="dock:buttons" flexDirection="row" gap={1} flexShrink={0} alignItems="center">
             {mission && planCard && tab('plan', 'P', 'p', open.plan, false, () => send($, 'mission-control'), planCard, planRows)}
             {isModOn(list, 'next-tasks') &&
               tab('next', 'N', 'n', card?.isOpen === true, !!card && card.items.length > 0 && !card.isOpen, () => send($, 'next-tasks'), nextCard, nextRows)}

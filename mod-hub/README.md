@@ -4,14 +4,14 @@
 
 **The dock:** one line just above the prompt, always in the same place:
 ```
-✓ done 6m50s                                   ●[P] ●[N] [C] ●[PR] [M] ▾
+◎ ━━━━━━──── 46%  3/5 · ~8m  wiring the tile streamer…   [P] ●[N] [C] ●[PR] [M] ▾
 ```
-- **Left:** the running task's progress and "now" line. When it finishes it reads `✓ done 6m53s` until your next prompt.
+- **Left:** the running task as a solid bar, %, step and time left (these never get cut off), then the "now" line, which is trimmed with "…" when space runs out. When the task finishes it reads `✓ done 6m53s` until your next prompt.
 - **Tabs:** one bordered letter each. **P** plan · **N** next tasks · **C** coach · **PR** pull requests · **M** mods. A click opens that panel; a second click closes it. Clicking **N** with no suggestions yet asks for them.
 - **Dot before a letter:**
   - green: that panel is open.
   - amber: something new (suggestions ready, a new coach tip, a PR failing or in conflict).
-- **Hover a tab** to open a tall card above the dock, framed in that tab's color, without opening anything:
+- **Hover a tab** to see a popup card floating above it, framed in that tab's color, without opening anything:
   - **P** (cyan): task, bar, %, step, time left, now, and the step checklist.
   - **N** (amber): the three suggestions with their reasons.
   - **C** (violet): cache and context bars, cost, habits, what to do next.
