@@ -4,7 +4,7 @@ Two layers:
 - **Automated tests:** run in Claude Code's plugin test runner, with a simulated app and clock. They check the logic.
 - **Manual checklist:** the things only a real window can show, like whether the dock fits on one line at your width, how keys and focus behave in the desktop app, and where panels open.
 
-Last run: **2026-10-04, Claude Code 2.1.286. 48 automated tests, 48 pass.**
+Last run: **2026-10-04, Claude Code 2.1.286. 50 automated tests, 50 pass.**
 
 ## Running the automated tests
 
@@ -20,7 +20,7 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 | Mod | File | Tests |
 |---|---|---|
 | mod-hub | `tests/dock.test.tsx` | 13 (terminal buttons, desktop strip and popup, T, folding) |
-| mod-hub | `tests/onoff.test.tsx` | 6 (turn off and on, a page that's behind, refused at load, moving old stub switches, load order) |
+| mod-hub | `tests/onoff.test.tsx` | 8 (turn off and on, a page that's behind, refused at load, moving old stub switches, load order, removed mod folders) |
 | mission-control | `tests/progress.test.tsx` | 6 |
 | next-tasks | `tests/card.test.tsx` | 11 |
 | coach | `tests/toggle.test.tsx` | 4 |
@@ -100,6 +100,7 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 | ✅ | A mod on the list is refused when it loads; mods not on it load as usual | onoff 6c, 6d |
 | ✅ | A mod switched off the old way (`hooks.json` naming `off.tsx`) moves to the list, and its `hooks.json` goes back to `register.tsx` | onoff 6e |
 | ✅ | A switched-off mod listed ahead of the hub gets a toast saying to run the install script again | onoff 6f |
+| ✅ | A mod folder that's gone (deleted, or removed by a `git pull`) comes out of `CLAUDE_CODE_PLUGIN_DIRS` in `settings.json` (backed up first) and out of `off.json`, with a toast; folders elsewhere and every other setting are left alone, and nothing is written while all folders are there | onoff 6g, 6h |
 | ✅ | In a running engine: switching off a loaded mod unloads it, switching it on loads it and runs its `session.start`, a hub reload leaves off mods off, and a mod listed before the hub can't be refused | checked 2026-10-04 in headless sessions of the bundled engine: stand-in mods, then all 9 real mods in an isolated copy (also an old stub switch, moved and refused at start, and the ahead-of-hub toast) |
 | 👀 ☐ | Switch a mod off on the hub page: an open, idle session drops it within seconds, and `git status` shows nothing | manual |
 | 👀 ☐ | Switch it back on: its tab or panel comes back without starting a new session | manual |

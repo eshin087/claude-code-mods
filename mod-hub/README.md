@@ -38,8 +38,10 @@ Buttons work even while Claude is busy: a press writes a small signal that the t
 - Older hubs switched a mod off by pointing its `hooks.json` at a stub (`hooks/off.tsx`). The hub moves any mod it finds like that onto the list and points `hooks.json` back at `register.tsx` by itself.
 - Leftover `off.tsx` files are git-ignored and safe to delete.
 
+**Removing a mod:** delete its folder (and commit that, so other computers lose it with their next `git pull`). At the next session start the hub sees the folder is gone and takes it out of `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` (backed up to `settings.json.bak` first) and out of `off.json`, then says so in a toast. Only folders in this mods folder are touched; nothing else in your settings changes.
+
 **Cost:** none. No model calls. The T tab checks the app's pane layout every 5 seconds (a local call).
 
-**Data saved:** `~/.claude/mods-data/mod-hub/off.json`, the mods switched off on this computer.
+**Data saved:** `~/.claude/mods-data/mod-hub/off.json`, the mods switched off on this computer. It also edits `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`, only to take out a mod folder that is gone.
 
 **Notes:** the hub can't switch itself off from the page. To remove it, delete or rename its folder. Without the hub nothing refuses the switched-off mods, so they all load.

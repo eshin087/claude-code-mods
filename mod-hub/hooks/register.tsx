@@ -91,15 +91,52 @@ const writeOff = async ($: EngineInterface, names: string[]) =>
 // The engine asks only the mods loaded before a mod whether it may load, so the
 // hub must come first in CLAUDE_CODE_PLUGIN_DIRS (the installers put it there).
 // The folders listed ahead of it, which it cannot keep off.
+const normDir = (p: string, isWindows: boolean) => {
+  const path = p.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  return isWindows ? path.toLowerCase() : path
+}
+
 const foldersAheadOfHub = async ($: EngineInterface) => {
   const isWindows = /^[A-Za-z]:/.test($.plugin.root)
-  const norm = (p: string) => {
-    const path = p.trim().replace(/\\/g, '/').replace(/\/+$/, '')
-    return isWindows ? path.toLowerCase() : path
-  }
-  const dirs = ((await $.env.get('CLAUDE_CODE_PLUGIN_DIRS')) ?? '').split(isWindows ? ';' : ':').map(norm)
-  const at = dirs.indexOf(norm($.plugin.root))
+  const dirs = ((await $.env.get('CLAUDE_CODE_PLUGIN_DIRS')) ?? '').split(isWindows ? ';' : ':').map(d => normDir(d, isWindows))
+  const at = dirs.indexOf(normDir($.plugin.root, isWindows))
   return at < 0 ? [] : dirs.slice(0, at).map(d => d.slice(d.lastIndexOf('/') + 1))
+}
+
+// A mod folder that is gone (deleted here, or by a git pull) comes out of
+// CLAUDE_CODE_PLUGIN_DIRS in ~/.claude/settings.json and out of off.json, so
+// new sessions stop trying to load it. Only folders beside the hub are touched;
+// settings.json is backed up to settings.json.bak first, as the installers do.
+const pruneGone = async ($: EngineInterface) => {
+  const isWindows = /^[A-Za-z]:/.test($.plugin.root)
+  const sep = isWindows ? ';' : ':'
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
+  const file = `${home.replace(/\\/g, '/')}/.claude/settings.json`
+  const text = await $.fs.read(file).catch(() => null)
+  if (text === null) return []
+  let settings: { env?: Record<string, unknown> }
+  try {
+    settings = JSON.parse(text)
+  } catch {
+    return []
+  }
+  const value = settings.env?.CLAUDE_CODE_PLUGIN_DIRS
+  if (typeof value !== 'string') return []
+  const base = normDir(parentOf($.plugin.root), isWindows)
+  const dirs = value.split(sep).filter(d => d.trim() !== '')
+  const gone: string[] = []
+  for (const dir of dirs) {
+    if (parentOf(normDir(dir, isWindows)) !== base) continue
+    if (!(await $.fs.exists(`${dir.trim()}/.claude-plugin/plugin.json`))) gone.push(dir)
+  }
+  if (gone.length === 0) return []
+  await $.fs.write(`${file}.bak`, text)
+  settings.env!.CLAUDE_CODE_PLUGIN_DIRS = dirs.filter(d => !gone.includes(d)).join(sep)
+  await $.fs.write(file, `${JSON.stringify(settings, null, 2)}\n`)
+  const names = gone.map(d => normDir(d, false).split('/').pop()!)
+  const off = await readOff($)
+  if (off.some(n => names.includes(n))) await writeOff($, off.filter(n => !names.includes(n)))
+  return names
 }
 
 const aheadWarning = (names: string) =>
@@ -285,6 +322,8 @@ export const register: Register = on => {
     const list = await scan($).catch(() => [] as HubMod[])
     const stuck = list.filter(m => !m.isOn && m.isAheadOfHub)
     if (stuck.length > 0) $.ui.toast(aheadWarning(stuck.map(m => m.name).join(', ')), { timeoutMs: 12000 })
+    const gone = await pruneGone($).catch(() => [] as string[])
+    if (gone.length > 0) $.ui.toast(`Removed ${gone.join(', ')} from your mods: its folder is gone.`, { timeoutMs: 8000 })
     await reviewIfQueued($).catch(() => undefined)
     // The T tab: running agents, and whether the app's tasks pane is open.
     $.clock.every(5000, () => void refreshTasks($).catch(() => undefined))

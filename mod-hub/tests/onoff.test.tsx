@@ -8,6 +8,7 @@ import type { On, Register } from 'claude-code'
 const ON = '{ "modules": ["./register.tsx"] }\n'
 const OLD_OFF = '{ "modules": ["./off.tsx"] }\n'
 const OFF_LIST = '~/.claude/mods-data/mod-hub/off.json'
+const SETTINGS = '~/.claude/settings.json'
 const HOME = 'C:/Users/test'
 const PANE_PROPS = { title: 'Mods', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 const MODS = ['mod-hub', 'coach', 'next-tasks', 'pr-desk']
@@ -19,6 +20,8 @@ type DiskOptions = {
   hooks?: Record<string, string>
   /** CLAUDE_CODE_PLUGIN_DIRS as folder names, in order; every mod, hub first, when absent. */
   order?: string[]
+  /** ~/.claude/settings.json, given the mods folder; written once the hub lists that folder. */
+  settings?: (base: string) => Record<string, unknown>
 }
 
 const disk = (on: On, opts: DiskOptions = {}) => {
@@ -41,6 +44,7 @@ const disk = (on: On, opts: DiskOptions = {}) => {
   }
   on('fs.list', ($, e) => {
     base = norm(e.path)
+    if (opts.settings && !(SETTINGS in files)) files[SETTINGS] = `${JSON.stringify(opts.settings(base), null, 2)}\n`
     return { value: MODS.map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
   on('fs.exists', ($, e) => ({ value: keyOf(e.path) in files }))
@@ -166,4 +170,36 @@ test('6f. a switched-off mod listed ahead of the hub gets a warning: the engine 
   // Switching a mod behind the hub works as usual.
   await ui.press({ key: 'toggle:pr-desk' })
   expect(toasts.at(-1)).toBe('pr-desk switched off.')
+})
+
+// Folders as a Windows settings.json lists them, in the mods folder the hub listed.
+const winDir = (base: string, folder: string) => `${base}/${folder}`.replace(/\//g, '\\')
+// A gone folder that isn't beside the hub, which the hub leaves alone.
+const ELSEWHERE = 'D:\\elsewhere\\gone'
+
+test('6g. a mod folder that is gone comes out of CLAUDE_CODE_PLUGIN_DIRS in settings.json, and out of off.json', async ($, on) => {
+  let base = ''
+  const listed = (b: string) => [...MODS.slice(0, 2), 'plan-autopilot', ...MODS.slice(2)].map(f => winDir(b, f)).concat(ELSEWHERE)
+  const { files, toasts, offList } = disk(on, {
+    off: ['coach', 'plan-autopilot'],
+    settings: b => {
+      base = b
+      return { env: { CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: '1', CLAUDE_CODE_PLUGIN_DIRS: listed(b).join(';') }, model: 'opus' }
+    },
+  })
+  await start($)
+  const saved = JSON.parse(files[SETTINGS]!) as { env: Record<string, string>; model: string }
+  // Only the gone folder beside the hub goes; a folder elsewhere is left alone, as is every other setting.
+  expect(saved.env.CLAUDE_CODE_PLUGIN_DIRS!.split(';')).toEqual([...MODS.map(f => winDir(base, f)), ELSEWHERE])
+  expect(saved.env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS).toBe('1')
+  expect(saved.model).toBe('opus')
+  expect(JSON.parse(files[`${SETTINGS}.bak`]!).env.CLAUDE_CODE_PLUGIN_DIRS).toBe(listed(base).join(';'))
+  expect(offList()).toEqual(['coach'])
+  expect(toasts).toContain('Removed plan-autopilot from your mods: its folder is gone.')
+})
+
+test('6h. settings.json is left alone while every listed mod folder is there', async ($, on) => {
+  const { writes } = disk(on, { settings: b => ({ env: { CLAUDE_CODE_PLUGIN_DIRS: MODS.map(f => winDir(b, f)).join(';') } }) })
+  await start($)
+  expect(writes.filter(w => w.startsWith(SETTINGS))).toEqual([])
 })

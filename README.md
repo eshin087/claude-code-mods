@@ -12,7 +12,6 @@ Small plugins of function hooks that change how [Claude Code](https://docs.claud
 | usage-meter | 5-hour and weekly usage bars in the footer, always on (reset times in the **C** card) | footer |
 | turn-timer | How long every prompt took, saved in the chat, plus history | `/timings`, `/timings all` |
 | collision-guard | Warns when parallel sessions edit the same file or version | toasts, `/collisions` |
-| plan-autopilot | Plans on Sonnet, builds on Opus once you approve | Plan mode |
 
 Each mod's folder has a README with the details.
 
@@ -46,7 +45,7 @@ Then start a new Claude Code session, or reopen the app.
 
 ## Keep computers in sync
 
-Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. Run the install script again when a new mod folder was added, or when the hub warns that a mod loads before it (installs older than the per-computer switch listed folders alphabetically).
+Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. A mod removed from the repo drops out by itself: the folder goes with the pull, and the hub takes it out of your settings at the next session start. Run the install script again when a new mod folder was added, or when the hub warns that a mod loads before it (installs older than the per-computer switch listed folders alphabetically).
 
 Which mods are on or off is never synced: each computer keeps its own list (see Data).
 
