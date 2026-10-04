@@ -1,0 +1,6 @@
+{
+  "name": "turn-timer",
+  "version": "0.1.0",
+  "description": "Saves how long every turn took as a row in the chat, logs every prompt's timing, and adds /timings to look back.",
+  "author": { "name": "eshin087" }
+}

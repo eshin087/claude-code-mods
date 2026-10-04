@@ -1,0 +1,6 @@
+{
+  "name": "plan-autopilot",
+  "version": "0.1.0",
+  "description": "Plan-mode turns run on Sonnet; once you approve the plan, the build starts as a fresh turn on your session's model (Opus).",
+  "author": { "name": "eshin087" }
+}

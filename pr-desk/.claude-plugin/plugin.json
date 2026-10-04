@@ -1,0 +1,7 @@
+{
+  "name": "pr-desk",
+  "version": "0.1.0",
+  "description": "/prs: your open PRs across your repos with Vercel preview links, checks, merge state and worktree.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

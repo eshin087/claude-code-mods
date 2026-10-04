@@ -1,0 +1,9 @@
+{
+  "name": "usage-meter",
+  "version": "0.1.0",
+  "description": "Sleek colored 5-hour and weekly usage bars in the footer; warns at 75%/90% and before agent waves when the window is low.",
+  "author": {
+    "name": "eshin087"
+  },
+  "types": "./types/index.d.ts"
+}

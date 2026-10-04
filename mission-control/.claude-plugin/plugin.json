@@ -1,0 +1,7 @@
+{
+  "name": "mission-control",
+  "version": "0.1.0",
+  "description": "Live plan, % done, time left and a one-line 'now' for long tasks, in a pane and on the working row.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

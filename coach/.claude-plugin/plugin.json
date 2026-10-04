@@ -1,0 +1,7 @@
+{
+  "name": "coach",
+  "version": "0.1.0",
+  "description": "/coach: live cost, cache, context and subagent stats, SDLC habit checks and architect lessons; one tip after a turn when it matters.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

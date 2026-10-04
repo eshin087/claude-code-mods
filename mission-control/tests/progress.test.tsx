@@ -1,0 +1,165 @@
+// Mission Control tests: `claude plugin test` in this folder. The clock is
+// simulated, so a 30-second task runs in milliseconds.
+import { expect, mock, test } from 'claude-code/testing'
+import type { On, Register } from 'claude-code'
+
+const TOOL = 'mcp__mission-control__plan'
+
+// A stand-in for the dock: a prompt "press:<mod>" writes the dock's signal,
+// as a click on that dock button does.
+const DOCK: { name: string; register: Register } = {
+  name: 'mod-hub',
+  register: on => {
+    on('prompt.submit', async ($, e, next) => {
+      if (!e.text.startsWith('press:')) return next(e)
+      const cur = (await $.state.get({ plugin: 'mod-hub', key: 'signal' })).value
+      await $.state.set({ plugin: 'mod-hub', key: 'signal' }, { seq: (cur?.seq ?? 0) + 1, target: e.text.slice(6) })
+      return { text: e.text }
+    })
+  },
+}
+
+// The test's own $ has no state noun, so a probe mod reads Mission Control's
+// values (any mod may read another's) and hands them back as a tool result.
+const PROBE: { name: string; register: Register } = {
+  name: 'probe',
+  register: on => {
+    on('tool.call', { tool: 'mcp__probe__read' }, async $ => ({
+      result: {
+        summary: (await $.state.get({ plugin: 'mission-control', key: 'summary' })).value ?? null,
+        mission: (await $.state.get({ plugin: 'mission-control', key: 'mission' })).value ?? null,
+        isOpen: (await $.state.get({ plugin: 'mission-control', key: 'isOpen' })).value ?? false,
+      },
+    }))
+  },
+}
+
+// What the engine answers beneath the plugins.
+const world = (on: On) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.env(on, { USERPROFILE: 'C:/Users/test' })
+  const panes = new Set<string>()
+  const files: Record<string, string> = {}
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.cwd', () => ({ value: 'C:/x/gcdAtlas' }))
+  on('session.id', () => ({ value: 'session-1' }))
+  on('tool.register', ($, e) => ({ value: { tool: `mcp__mission-control__${e.name}` } }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('fs.exists', ($, e) => ({ value: e.path in files }))
+  on('fs.write', ($, e) => {
+    files[e.path] = e.text
+    return { value: undefined }
+  })
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.submit', ($, e) => ({ text: e.text }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('ui.panes', () => ({ value: [...panes].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
+  on('ui.open', ($, e) => {
+    panes.add(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    panes.delete(e.id)
+    return { value: undefined }
+  })
+  return { clock, panes }
+}
+
+type Engine = Parameters<Parameters<typeof test>[1] & ((...a: never[]) => unknown)>[0]
+
+const begin = async ($: Engine) => {
+  await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: 'build the thing', turnId: 't1' })
+}
+const plan = ($: Engine, input: Record<string, unknown>) => $.tool.call({ tool: TOOL, ...input } as never)
+const finish = ($: Engine, turnId: string) =>
+  $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId, reason: 'answer' } as never)
+type Peek = { summary: { pct: number; stepNo: number; total: number; left: string | null; elapsedMs: number; isFinished: boolean; now: string } | null; mission: unknown; isOpen: boolean }
+const peek = async ($: Engine) => (await $.tool.call({ tool: 'mcp__probe__read' } as never)).result as Peek
+const summary = async ($: Engine) => (await peek($)).summary
+
+test('4a. the progress bar climbs a little every second during a step, never backwards', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await begin($)
+  await plan($, { title: 'Demo', steps: [{ text: 'a', size: 1 }, { text: 'b', size: 1 }, { text: 'c', size: 1 }], start: 1, now: 'starting' })
+  const first = await summary($)
+  expect(first?.stepNo).toBe(1)
+  expect(first?.total).toBe(3)
+
+  const seen: number[] = []
+  for (let s = 0; s < 30; s++) {
+    await clock.advance(1000)
+    const now = await summary($)
+    seen.push(now!.pct)
+    expect(now!.elapsedMs).toBe((s + 1) * 1000)
+  }
+  for (let i = 1; i < seen.length; i++) {
+    expect(seen[i]! - seen[i - 1]!).toBeGreaterThan(0)
+    expect(seen[i]! - seen[i - 1]!).toBeLessThan(0.01)
+  }
+
+  await plan($, { done: [1], start: 2, now: 'second step' })
+  expect((await summary($))!.pct).toBeGreaterThanOrEqual(1 / 3)
+  expect((await summary($))!.stepNo).toBe(2)
+  expect((await summary($))!.now).toBe('second step')
+})
+
+test('4b. finishing shows the done chip; the next prompt you send clears it', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await begin($)
+  await plan($, { title: 'Demo', steps: [{ text: 'a' }, { text: 'b' }], start: 1 })
+  await clock.advance(5000)
+  await plan($, { finished: true })
+  const done = await summary($)
+  expect(done?.isFinished).toBe(true)
+  expect(done?.pct).toBe(1)
+  expect(done?.left).toBe(null)
+  expect(done?.elapsedMs).toBe(5000)
+
+  // The chip stays through the end of the turn and while idle...
+  await finish($, 't1')
+  await clock.advance(60_000)
+  expect((await summary($))?.isFinished).toBe(true)
+  // ...and goes with your next prompt.
+  await $.prompt.submit({ text: 'thanks, next thing', wait: false, origin: { kind: 'composer' } } as never)
+  expect(await summary($)).toBe(null)
+})
+
+test('4c. time stops counting while the turn is over (waiting on you)', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await begin($)
+  await plan($, { title: 'Demo', steps: [{ text: 'a' }, { text: 'b' }], start: 1 })
+  await clock.advance(10_000)
+  await plan($, { now: 'still on a' })
+  await finish($, 't1')
+  const paused = (await summary($))!.elapsedMs
+  await clock.advance(120_000)
+  expect((await summary($))!.elapsedMs).toBe(paused)
+})
+
+test('4d. a board Claude stops updating for 2 turns is cleared', { plugins: [PROBE] }, async ($, on) => {
+  world(on)
+  await begin($)
+  await plan($, { title: 'Demo', steps: [{ text: 'a' }, { text: 'b' }], start: 1 })
+  await finish($, 't1')
+  await $.turn.start({ text: 'quick question', turnId: 't2' })
+  await finish($, 't2')
+  expect((await summary($))).not.toBe(null)
+  await $.turn.start({ text: 'another one', turnId: 't3' })
+  await finish($, 't3')
+  expect(await summary($)).toBe(null)
+  expect((await peek($)).mission).toBe(null)
+})
+
+test('1. Plan: a dock press opens the mission pane, a second press closes it', { plugins: [DOCK, PROBE] }, async ($, on) => {
+  const { panes } = world(on)
+  await begin($)
+  await plan($, { title: 'Demo', steps: [{ text: 'a' }, { text: 'b' }], start: 1 })
+  await $.prompt.submit({ text: 'press:mission-control', wait: false, origin: { kind: 'composer' } } as never)
+  expect(panes.has('mission')).toBe(true)
+  expect((await peek($)).isOpen).toBe(true)
+  await $.prompt.submit({ text: 'press:mission-control', wait: false, origin: { kind: 'composer' } } as never)
+  expect(panes.has('mission')).toBe(false)
+  expect((await peek($)).isOpen).toBe(false)
+})

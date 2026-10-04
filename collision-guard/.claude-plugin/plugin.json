@@ -1,0 +1,6 @@
+{
+  "name": "collision-guard",
+  "version": "0.1.0",
+  "description": "Warns when another Claude session on the same repo already edited the file being changed, or claimed the same package version.",
+  "author": { "name": "eshin087" }
+}

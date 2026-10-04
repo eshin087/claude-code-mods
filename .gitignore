@@ -1,0 +1,9 @@
+# Written by Claude Code beside each mod when it loads one (its API types); rebuilt on every load.
+**/.claude-plugin/types/
+
+# Personal settings: PR Desk's repo list and Vercel team. Copy pr-desk/config.example.json.
+pr-desk/config.json
+
+.claude/
+node_modules/
+*.bak

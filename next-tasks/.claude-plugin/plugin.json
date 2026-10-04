@@ -1,0 +1,7 @@
+{
+  "name": "next-tasks",
+  "version": "0.1.0",
+  "description": "After longer turns, suggests 3 next tasks for the project with a Do it button each, and a Dismiss.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

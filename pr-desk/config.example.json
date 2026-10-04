@@ -1,0 +1,7 @@
+{
+  "repos": [
+    "your-github-name/your-repo",
+    "your-github-name/another-repo"
+  ],
+  "vercelTeam": "your-vercel-team-slug"
+}
