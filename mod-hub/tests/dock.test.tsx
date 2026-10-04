@@ -252,8 +252,11 @@ test('[desktop] 1b. hovering shows ONE popup, always in the same place, for whic
   const { clock } = world(on, {}, { agents: [{ id: 'a1', description: 'review the tiles PR', type: 'general-purpose', status: 'running' }] })
   await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
   await clock.advance(5_000)
-  const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: BAND_PROPS })
+  // A band tall enough for every card whole (a short one cuts the card's lines).
+  const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND_PROPS, maxRows: 30, scroll: { offset: 0, bodyRows: 29 } } })
+  const root = async () => (await ui.drawn()) as Node
   expect(await ui.find({ key: 'dock:popup' })).toBeUndefined()
+  expect((await root()).props?.minHeight).toBeUndefined()
   const lefts = new Set<unknown>()
   const cards: Record<string, string> = {}
   for (const id of ['plan', 'next', 'coach', 'prs', 'tasks', 'mods'] as const) {
@@ -264,7 +267,11 @@ test('[desktop] 1b. hovering shows ONE popup, always in the same place, for whic
     expect(popup.props.position).toBe('absolute')
     expect(popup.props.width).toBe(52)
     expect(popup.props.borderStyle).toBe('round')
-    expect(popup.props.top as number).toBeLessThan(-3)
+    // Just above the dock row, inside the band (which clips absolute boxes).
+    expect(popup.props.bottom).toBe(1)
+    expect(popup.props.top).toBeUndefined()
+    // The band grows to the card (title, lines, 2 border rows) plus the dock row.
+    expect((await root()).props?.minHeight).toBe(popup.children.length + 2 + 1)
     lefts.add(popup.props.left)
     cards[id] = textIn(popup)
   }
@@ -276,9 +283,10 @@ test('[desktop] 1b. hovering shows ONE popup, always in the same place, for whic
   expect(cards.prs).toMatch(/Pull requests · 2 open.*#1 ✗ conflicts.*#2 ✓ ready/)
   expect(cards.tasks).toMatch(/Background tasks · 1 running.*general-purpose review the tiles PR.*Click T to open/)
   expect(cards.mods).toMatch(/Mods · 0 on · 0 off/)
-  // Off the strip, the popup goes.
+  // Off the strip, the popup goes and the band shrinks back.
   await ui.pointer({ type: 'leave', x: 0, y: 0 })
   expect(await ui.find({ key: 'dock:popup' })).toBeUndefined()
+  expect((await root()).props?.minHeight).toBeUndefined()
 })
 
 test("5. T opens the app's Background tasks pane and closes it", { plugins: PEERS }, async ($, on) => {

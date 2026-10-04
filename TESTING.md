@@ -83,9 +83,9 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 
 | | Check | How it's tested |
 |---|---|---|
-| ✅ | Hovering any tab shows exactly one card, at the same spot for every tab; leaving the strip removes it | dock 1b |
+| ✅ | Hovering any tab shows exactly one card, at the same spot for every tab, just above the dock row; the band grows to fit it only while it shows; leaving the strip removes it and shrinks the band back | dock 1b |
 | ✅ | Each card's content: P (with accuracy), N, C (with limits and reset time), PR, T (running agents), M | dock 1b |
-| 👀 ☐ | In the app, the card never clips at the top or the right, and no line wraps | manual |
+| 👀 ☐ | In the app, the card never clips at the top or the right, no line wraps, and the dock and tabs don't move while it shows (with and without the next-task card open) | manual |
 | ✅ | The next-task card folds to N after 10 s with no answer; reopening gives a fresh 10 s | next-tasks auto-hide |
 | ✅ | The footer meter is a plain SVG (an interactive one isn't drawn in the footer) | meter desktop |
 | ✅ | A new session shows the last reading at once; a 5-hour window that has reset since is left out | meter restore tests |
@@ -132,6 +132,7 @@ Found while writing and running these tests on 2026-10-03.
 | B21 | High | **The new tab strip didn't load.** The engine finds a strip's code by reading the source for a `Client` element with a literal path; the variable was named `ClientEl`, so it found none. | Fixed: named `Client` | dock 1, 1b |
 | B22 | Medium | **Whole test suites failed for no code reason.** Next tasks, PR Desk and Plan autopilot were switched off in the hub, so the test runner loaded their empty stubs. | Fixed (2026-10-04): switches live in `mods-data/mod-hub/off.json` and the hub applies them at load, so tests always run the real code | all next-tasks and pr-desk tests, run while switched off |
 | B23 | Medium | **On/off leaked into git.** A switch rewrote the tracked `hooks.json`, so it showed in `git status`, and committing it would switch that mod off on every computer. | Fixed with B22: a switch changes no tracked file; old stub switches are moved to the list by themselves | onoff 6a, 6e |
+| B24 | High | **Hover card clipped at the top.** The band clips absolute boxes to itself, and it was only as tall as its content (the next-task card and the dock row), so a card placed above the dock lost its title and first lines. | Fixed: the card sits just above the dock row, and the band grows to fit it only while hovering (extra rows at the top, so the dock doesn't move); a short band cuts the card's lines | dock 1b |
 | B8 | Low | **Old suggestions lingered.** `Next·3` stayed in the dock forever after a long turn. | Fixed: suggestions expire after 3 of your prompts | next-tasks "3 prompts later" |
 
 ### Known limits (not bugs, but worth knowing)
