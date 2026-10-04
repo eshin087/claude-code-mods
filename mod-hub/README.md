@@ -29,12 +29,17 @@ Buttons work even while Claude is busy: a press writes a small signal that the t
 
 **The hub page:** click **Mods** in the dock, or type `/mods`. A pane opens with every mod, its version, a one-line summary, **Details** (this page) and **Turn off / Turn on**.
 
-**How on/off works:** each mod's `hooks/hooks.json` names the code file that runs. *Turn off* points it at an empty stub (`hooks/off.tsx`) and *Turn on* points it back at `hooks/register.tsx`. Nothing is deleted. Sessions that watch the folder reload the mod at once; any other session picks the change up when it starts. The switch is shared by every session on this PC, because it changes the file itself.
+**How on/off works:** the switched-off mods are a list on this computer, `~/.claude/mods-data/mod-hub/off.json`. *Turn off* adds a mod to it and *Turn on* takes it out. Whenever a mod loads, the engine first asks the mods loaded before it (`plugin.register`), and the hub refuses any mod on the list, so none of its hooks, commands or tools run. The engine's log names each one: `refused by mod-hub: switched off in /mods`.
+- The switch also saves the mod's `hooks/hooks.json` again, byte for byte. The new timestamp makes every session that watches the folder reload that mod at once (a session busy with a reply does it when the reply ends), and the reload asks the hub again. Any other session picks the change up when it starts.
+- The switch covers every session on this computer. Nothing is deleted.
+- **The hub must load first.** A mod can only be refused by mods that load before it, so `mod-hub` comes first in `CLAUDE_CODE_PLUGIN_DIRS`, and the install scripts put it there. If a switched-off mod loads ahead of the hub (older installs listed folders alphabetically), the hub says so in a toast: run the install script again.
 
-**On/off and git:** because the switch edits `hooks.json`, a switched-off mod shows as a change in `git status`. Don't commit those lines unless you want every computer to have that mod off. The stubs (`hooks/off.tsx`) are git-ignored.
+**On/off and git:** switching changes no tracked file, so `git status` stays clean and on/off never travels through a commit or `git pull`: each computer keeps its own list. `claude plugin test` always runs a mod's real code, whether it's switched off or not.
+- Older hubs switched a mod off by pointing its `hooks.json` at a stub (`hooks/off.tsx`). The hub moves any mod it finds like that onto the list and points `hooks.json` back at `register.tsx` by itself.
+- Leftover `off.tsx` files are git-ignored and safe to delete.
 
 **Cost:** none. No model calls. The T tab checks the app's pane layout every 5 seconds (a local call).
 
-**Data saved:** none of its own.
+**Data saved:** `~/.claude/mods-data/mod-hub/off.json`, the mods switched off on this computer.
 
-**Notes:** the hub can't switch itself off from the page. To remove it, delete or rename its folder.
+**Notes:** the hub can't switch itself off from the page. To remove it, delete or rename its folder. Without the hub nothing refuses the switched-off mods, so they all load.

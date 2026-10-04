@@ -40,13 +40,15 @@ Then start a new Claude Code session, or reopen the app.
 |---|---|
 | `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` | Turns function hooks on. |
 | `CLAUDE_CODE_PLUGIN_DIR_WATCH=1` | Open sessions reload a mod as soon as its files change. |
-| `CLAUDE_CODE_PLUGIN_DIRS` | Every mod folder here, separated by `;` on Windows or `:` elsewhere. |
+| `CLAUDE_CODE_PLUGIN_DIRS` | Every mod folder here, separated by `;` on Windows or `:` elsewhere. `mod-hub` comes first: the hub can only switch off mods that load after it. |
 
 **PR Desk:** copy `pr-desk/config.example.json` to `pr-desk/config.json` and list your repos. That file stays out of git.
 
 ## Keep computers in sync
 
-Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. Run the install script again only when a new mod folder was added.
+Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. Run the install script again when a new mod folder was added, or when the hub warns that a mod loads before it (installs older than the per-computer switch listed folders alphabetically).
+
+Which mods are on or off is never synced: each computer keeps its own list (see Data).
 
 ## Testing
 
@@ -54,4 +56,4 @@ See [TESTING.md](TESTING.md) for how to run the automated tests (`claude plugin 
 
 ## Data
 
-Saved history lives in `~/.claude/mods-data/<mod>/` on each computer, and isn't synced. Delete a folder to wipe that mod's history.
+Saved history lives in `~/.claude/mods-data/<mod>/` on each computer, and isn't synced. Delete a folder to wipe that mod's history. The hub's on/off switches live there too, in `mod-hub/off.json`.

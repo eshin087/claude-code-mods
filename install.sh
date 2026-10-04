@@ -4,7 +4,8 @@
 # Writes three settings into ~/.claude/settings.json (backed up first as settings.json.bak):
 #   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS = 1      function hooks on
 #   CLAUDE_CODE_PLUGIN_DIR_WATCH      = 1      sessions reload a mod when its files change
-#   CLAUDE_CODE_PLUGIN_DIRS           = every mod folder here, ':'-separated
+#   CLAUDE_CODE_PLUGIN_DIRS           = every mod folder here, ':'-separated, mod-hub first
+#                                        (a mod can only be switched off if it loads after the hub)
 # Everything else in your settings is kept. Run it again after adding a mod folder.
 set -euo pipefail
 root="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +16,8 @@ import json, os, pathlib, shutil, sys
 
 root = pathlib.Path(sys.argv[1])
 path = pathlib.Path(sys.argv[2])
-mods = sorted(str(p) for p in root.iterdir() if (p / '.claude-plugin' / 'plugin.json').is_file())
+found = [p for p in root.iterdir() if (p / '.claude-plugin' / 'plugin.json').is_file()]
+mods = [str(p) for p in sorted(found, key=lambda p: (p.name != 'mod-hub', p.name))]
 if not mods:
     sys.exit(f'No mods found in {root}')
 

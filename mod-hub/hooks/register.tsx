@@ -4,7 +4,9 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import type { HubMod, HubTask } from '../types'
 
 // Two jobs. The hub: every mod in the mods folder, its README, and an on/off
-// switch (switching off points hooks.json at an empty hooks/off.tsx stub).
+// switch. A switched-off mod is named in ~/.claude/mods-data/mod-hub/off.json
+// (this computer only) and the hub refuses it at `plugin.register`, so no mod
+// file changes and git sees nothing.
 // The dock: one line above the prompt with the running task's progress and a
 // toggle button per mod, badged with what is worth a look. A press for another
 // mod is written to `signal`; that mod hooks the write and toggles its own
@@ -13,8 +15,9 @@ import type { HubMod, HubTask } from '../types'
 const PANE = 'mods'
 const SELF = 'mod-hub'
 const ON = `{ "modules": ["./register.tsx"] }\n`
-const OFF = `{ "modules": ["./off.tsx"] }\n`
-const OFF_STUB = `// Written by mod-hub: this mod is switched off. Turn it back on with /mods.\nexport const register = () => {}\n`
+// What the old switch wrote into a switched-off mod's hooks.json; moved to off.json on sight.
+const LEGACY_OFF = './off.tsx'
+const REFUSAL = 'switched off in /mods'
 
 const mods = atom({ plugin: 'mod-hub', key: 'mods' } as const, [])
 const expanded = atom({ plugin: 'mod-hub', key: 'expanded' } as const, null)
@@ -71,24 +74,69 @@ const readJson = async ($: EngineInterface, path: string) => {
   }
 }
 
+const dataDir = async ($: EngineInterface) => {
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
+  return `${home.replace(/\\/g, '/')}/.claude/mods-data/mod-hub`
+}
+
+// The mods switched off on this computer, by name.
+const readOff = async ($: EngineInterface) => {
+  const saved = await readJson($, `${await dataDir($)}/off.json`)
+  return Array.isArray(saved?.off) ? saved.off.filter((n): n is string => typeof n === 'string') : []
+}
+
+const writeOff = async ($: EngineInterface, names: string[]) =>
+  $.fs.write(`${await dataDir($)}/off.json`, `${JSON.stringify({ off: [...new Set(names)].sort() }, null, 2)}\n`)
+
+// The engine asks only the mods loaded before a mod whether it may load, so the
+// hub must come first in CLAUDE_CODE_PLUGIN_DIRS (the installers put it there).
+// The folders listed ahead of it, which it cannot keep off.
+const foldersAheadOfHub = async ($: EngineInterface) => {
+  const isWindows = /^[A-Za-z]:/.test($.plugin.root)
+  const norm = (p: string) => {
+    const path = p.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+    return isWindows ? path.toLowerCase() : path
+  }
+  const dirs = ((await $.env.get('CLAUDE_CODE_PLUGIN_DIRS')) ?? '').split(isWindows ? ';' : ':').map(norm)
+  const at = dirs.indexOf(norm($.plugin.root))
+  return at < 0 ? [] : dirs.slice(0, at).map(d => d.slice(d.lastIndexOf('/') + 1))
+}
+
+const aheadWarning = (names: string) =>
+  `Can't keep ${names} off: loaded before mod-hub. Run install.ps1 (or install.sh) again to put mod-hub first, then start a new session.`
+
 const scan = async ($: EngineInterface) => {
   const root = parentOf($.plugin.root)
+  const entries = await $.fs.list(root)
+  const off = await readOff($)
+  const ahead = await foldersAheadOfHub($)
+  const isWindows = /^[A-Za-z]:/.test(root)
   const found: HubMod[] = []
-  for (const entry of await $.fs.list(root)) {
+  const legacy: { name: string; file: string }[] = []
+  for (const entry of entries) {
     const dir = `${root}/${entry.name}`
     const manifest = await readJson($, `${dir}/.claude-plugin/plugin.json`)
     if (!manifest) continue
+    const name = typeof manifest.name === 'string' ? manifest.name : entry.name
     const hooks = await readJson($, `${dir}/hooks/hooks.json`)
     const modules = Array.isArray(hooks?.modules) ? (hooks.modules as unknown[]) : []
+    if (modules.includes(LEGACY_OFF) && name !== SELF) legacy.push({ name, file: `${dir}/hooks/hooks.json` })
     const readme = (await $.fs.exists(`${dir}/README.md`)) ? await $.fs.read(`${dir}/README.md`) : null
     found.push({
       folder: entry.name,
-      name: typeof manifest.name === 'string' ? manifest.name : entry.name,
+      name,
       description: typeof manifest.description === 'string' ? manifest.description : '',
       version: typeof manifest.version === 'string' ? manifest.version : '',
-      isOn: !modules.includes('./off.tsx'),
+      isOn: !off.includes(name) && !legacy.some(l => l.name === name),
+      isAheadOfHub: ahead.includes(isWindows ? entry.name.toLowerCase() : entry.name),
       readme,
     })
+  }
+  // A mod the old switch turned off (its hooks.json names the off.tsx stub):
+  // the list first, so the reload the hooks.json write sets off refuses it.
+  if (legacy.length > 0) {
+    await writeOff($, [...off, ...legacy.map(l => l.name)])
+    for (const l of legacy) await $.fs.write(l.file, ON)
   }
   found.sort((a, b) => (a.name === SELF ? -1 : b.name === SELF ? 1 : a.name.localeCompare(b.name)))
   await update($, mods, () => found)
@@ -96,13 +144,19 @@ const scan = async ($: EngineInterface) => {
   return found
 }
 
+// Does what the pressed button said, even when a page left open elsewhere is behind.
 const toggle = async ($: EngineInterface, mod: HubMod) => {
   if (mod.name === SELF) return
-  const dir = `${await read($, rootRef)}/${mod.folder}/hooks`
-  if (mod.isOn && !(await $.fs.exists(`${dir}/off.tsx`))) await $.fs.write(`${dir}/off.tsx`, OFF_STUB)
-  await $.fs.write(`${dir}/hooks.json`, mod.isOn ? OFF : ON)
+  const rest = (await readOff($)).filter(n => n !== mod.name)
+  await writeOff($, mod.isOn ? [...rest, mod.name] : rest)
+  // hooks.json rewritten as it is: its new timestamp makes every watching
+  // session reload the mod, and the reload asks plugin.register again.
+  const file = `${await read($, rootRef)}/${mod.folder}/hooks/hooks.json`
+  const text = await $.fs.read(file).catch(() => null)
+  if (text !== null) await $.fs.write(file, text)
   await scan($)
-  $.ui.toast(`${mod.name} switched ${mod.isOn ? 'off' : 'on'}.`, { timeoutMs: 5000 })
+  const isStuck = mod.isOn && mod.isAheadOfHub
+  $.ui.toast(isStuck ? aheadWarning(mod.name) : `${mod.name} switched ${mod.isOn ? 'off' : 'on'}.`, { timeoutMs: isStuck ? 12000 : 5000 })
 }
 
 const toggleHub = async ($: EngineInterface) => {
@@ -131,8 +185,7 @@ const review = async ($: EngineInterface) => {
 // A review queued from outside (mods-data/mod-hub/review.json with { "pending": true })
 // runs once, a few seconds after the mods load, so every mod is listening.
 const reviewIfQueued = async ($: EngineInterface) => {
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const file = `${home.replace(/\\/g, '/')}/.claude/mods-data/mod-hub/review.json`
+  const file = `${await dataDir($)}/review.json`
   if (!(await $.fs.exists(file))) return
   try {
     const queued = JSON.parse(await $.fs.read(file)) as { pending?: boolean; session?: string }
@@ -217,12 +270,21 @@ const pressTab = async ($: EngineInterface, id: string) => {
 const isModOn = (list: HubMod[], name: string) => list.length === 0 || list.some(m => m.name === name && m.isOn)
 
 export const register: Register = on => {
+  // A switched-off mod never loads: the engine asks the hub about every mod
+  // loaded after it, at session start and at each reload.
+  on('plugin.register', async ($, e, next) => {
+    if (e.name !== SELF && (await readOff($)).includes(e.name)) return { refuse: REFUSAL }
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'mods', description: 'Mod Hub: what each mod does, and switch mods on or off (toggles)' })
     await $.command.register({ name: 'mods-review', description: 'Open every mod panel at once (Mods, Plan, Coach, PRs, next tasks)' })
     const wasCollapsed = (await $.store.get('collapsed')) === true
     await update($, isCollapsed, () => wasCollapsed)
-    await scan($).catch(() => undefined)
+    const list = await scan($).catch(() => [] as HubMod[])
+    const stuck = list.filter(m => !m.isOn && m.isAheadOfHub)
+    if (stuck.length > 0) $.ui.toast(aheadWarning(stuck.map(m => m.name).join(', ')), { timeoutMs: 12000 })
     await reviewIfQueued($).catch(() => undefined)
     // The T tab: running agents, and whether the app's tasks pane is open.
     $.clock.every(5000, () => void refreshTasks($).catch(() => undefined))

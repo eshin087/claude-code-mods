@@ -149,7 +149,13 @@ const world = (on: On, store: Record<string, unknown> = {}, opts: WorldOptions =
     return <Box />
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
+  // No mods folder and no off list (the hub's on/off has its own tests).
+  on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? 'C:/Users/test' : undefined }))
   on('fs.list', () => ({ value: [] }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', ($, e) => {
+    throw new Error(`ENOENT: ${e.path}`)
+  })
   on('ui.panes', () => ({ value: [...panes].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }))
   on('ui.open', ($, e) => {
     panes.add(e.id)

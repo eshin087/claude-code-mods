@@ -3,7 +3,8 @@
 # Writes three settings into ~/.claude/settings.json (backed up first as settings.json.bak):
 #   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS = 1      function hooks on
 #   CLAUDE_CODE_PLUGIN_DIR_WATCH      = 1      sessions reload a mod when its files change
-#   CLAUDE_CODE_PLUGIN_DIRS           = every mod folder here, ';'-separated
+#   CLAUDE_CODE_PLUGIN_DIRS           = every mod folder here, ';'-separated, mod-hub first
+#                                        (a mod can only be switched off if it loads after the hub)
 # Everything else in your settings is kept. Run it again after adding a mod folder.
 # Works in Windows PowerShell 5.1 and PowerShell 7.
 param([string]$SettingsPath = (Join-Path $HOME '.claude\settings.json'))
@@ -11,6 +12,7 @@ param([string]$SettingsPath = (Join-Path $HOME '.claude\settings.json'))
 $ErrorActionPreference = 'Stop'
 $mods = @(Get-ChildItem $PSScriptRoot -Directory |
   Where-Object { Test-Path (Join-Path $_.FullName '.claude-plugin\plugin.json') } |
+  Sort-Object { $_.Name -ne 'mod-hub' }, Name |
   ForEach-Object { $_.FullName })
 if ($mods.Count -eq 0) { throw "No mods found next to $PSCommandPath" }
 

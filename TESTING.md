@@ -4,7 +4,7 @@ Two layers:
 - **Automated tests:** run in Claude Code's plugin test runner, with a simulated app and clock. They check the logic.
 - **Manual checklist:** the things only a real window can show, like whether the dock fits on one line at your width, how keys and focus behave in the desktop app, and where panels open.
 
-Last run: **2026-10-04, Claude Code 2.1.286. 42 automated tests, 42 pass.**
+Last run: **2026-10-04, Claude Code 2.1.286. 48 automated tests, 48 pass.**
 
 ## Running the automated tests
 
@@ -15,11 +15,12 @@ $claude = (Get-ChildItem "$env:APPDATA\Claude\claude-code" -Recurse -Filter clau
 foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage-meter') { & $claude plugin test "$env:USERPROFILE\Desktop\Claude Code\mods\$m" }
 ```
 
-A mod switched **off** in the hub is tested as its empty stub, so all its tests fail. Switch it on first, or test a copy with `hooks/hooks.json` set to `{ "modules": ["./register.tsx"] }`.
+On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-data/mod-hub/off.json` and applies them when a real session loads the mods, so `claude plugin test` always runs a mod's own code, even one that's switched off.
 
 | Mod | File | Tests |
 |---|---|---|
 | mod-hub | `tests/dock.test.tsx` | 13 (terminal buttons, desktop strip and popup, T, folding) |
+| mod-hub | `tests/onoff.test.tsx` | 6 (turn off and on, a page that's behind, refused at load, moving old stub switches, load order) |
 | mission-control | `tests/progress.test.tsx` | 6 |
 | next-tasks | `tests/card.test.tsx` | 11 |
 | coach | `tests/toggle.test.tsx` | 4 |
@@ -90,6 +91,19 @@ A mod switched **off** in the hub is tested as its empty stub, so all its tests 
 | ✅ | A new session shows the last reading at once; a 5-hour window that has reset since is left out | meter restore tests |
 | 👀 ☐ | The meter stays in the footer across new sessions and app restarts | manual |
 
+### 6. On/off stays on this computer
+
+| | Check | How it's tested |
+|---|---|---|
+| ✅ | **Turn off** adds the mod to `off.json` and saves its `hooks.json` again unchanged (no stub, nothing for git); **Turn on** takes it off the list | onoff 6a |
+| ✅ | A button does what it said, even when another session changed the list after the page was drawn | onoff 6b |
+| ✅ | A mod on the list is refused when it loads; mods not on it load as usual | onoff 6c, 6d |
+| ✅ | A mod switched off the old way (`hooks.json` naming `off.tsx`) moves to the list, and its `hooks.json` goes back to `register.tsx` | onoff 6e |
+| ✅ | A switched-off mod listed ahead of the hub gets a toast saying to run the install script again | onoff 6f |
+| ✅ | In a running engine: switching off a loaded mod unloads it, switching it on loads it and runs its `session.start`, a hub reload leaves off mods off, and a mod listed before the hub can't be refused | checked 2026-10-04 in headless sessions of the bundled engine: stand-in mods, then all 9 real mods in an isolated copy (also an old stub switch, moved and refused at start, and the ahead-of-hub toast) |
+| 👀 ☐ | Switch a mod off on the hub page: an open, idle session drops it within seconds, and `git status` shows nothing | manual |
+| 👀 ☐ | Switch it back on: its tab or panel comes back without starting a new session | manual |
+
 ## Bug log
 
 Found while writing and running these tests on 2026-10-03.
@@ -116,7 +130,8 @@ Found while writing and running these tests on 2026-10-03.
 | B19 | High | **Two hover cards at once, clipped, in a different spot per tab.** Each tab had its own popup, and the desktop ignores `right: 0` on absolute boxes, so each card sat where its letter was. | Fixed: the dock draws a single card at a fixed left (dock width − card width), fed by a tab strip that reports which tab the pointer is over | dock 1b |
 | B20 | High | **The footer meter came and went.** The interactive (framed) SVG isn't drawn in the footer slot, and a new session had no reading until its first reply. | Fixed: a plain SVG, and the last reading is saved and shown at start (minus windows that have reset) | meter tests |
 | B21 | High | **The new tab strip didn't load.** The engine finds a strip's code by reading the source for a `Client` element with a literal path; the variable was named `ClientEl`, so it found none. | Fixed: named `Client` | dock 1, 1b |
-| B22 | Medium | **Whole test suites failed for no code reason.** Next tasks, PR Desk and Plan autopilot were switched off in the hub, so the test runner loaded their empty stubs. | Not a bug: documented above. The on/off lines in `hooks.json` are kept out of commits | all next-tasks and pr-desk tests |
+| B22 | Medium | **Whole test suites failed for no code reason.** Next tasks, PR Desk and Plan autopilot were switched off in the hub, so the test runner loaded their empty stubs. | Fixed (2026-10-04): switches live in `mods-data/mod-hub/off.json` and the hub applies them at load, so tests always run the real code | all next-tasks and pr-desk tests, run while switched off |
+| B23 | Medium | **On/off leaked into git.** A switch rewrote the tracked `hooks.json`, so it showed in `git status`, and committing it would switch that mod off on every computer. | Fixed with B22: a switch changes no tracked file; old stub switches are moved to the list by themselves | onoff 6a, 6e |
 | B8 | Low | **Old suggestions lingered.** `Next·3` stayed in the dock forever after a long turn. | Fixed: suggestions expire after 3 of your prompts | next-tasks "3 prompts later" |
 
 ### Known limits (not bugs, but worth knowing)
@@ -127,4 +142,5 @@ Found while writing and running these tests on 2026-10-03.
 - **L4, progress within a step:** the % inside a step is an estimate based on time, and stops at 90% of that step until Claude marks it done.
 - **L6, the T tab:** it drives the desktop app's own pane through the app's view tools. If a mod can't reach them (an older app, or the terminal), T shows a toast pointing to the menu instead.
 - **L7, estimate accuracy:** it appears only after a task that showed time-left guesses finishes with `finished: true`. A board cleared as stale isn't scored.
+- **L8, load order:** the hub can only keep off mods that load after it, so `mod-hub` must be first in `CLAUDE_CODE_PLUGIN_DIRS`. The install scripts do this; otherwise the hub shows a toast.
 - **L5, test shortcuts:** the stand-in mods replay the real mods' signal handling, and each real mod's own handling is tested in its own folder. Two of the mod tests fake a dock click with a prompt flagged as coming from a mod, because the test kit has no click into another mod's code.
