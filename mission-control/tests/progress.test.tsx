@@ -45,12 +45,18 @@ const world = (on: On) => {
   on('session.id', () => ({ value: 'session-1' }))
   on('tool.register', ($, e) => ({ value: { tool: `mcp__mission-control__${e.name}` } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('fs.exists', ($, e) => ({ value: e.path in files }))
+  const norm = (path: string) => path.replace(/\\/g, '/')
+  on('fs.exists', ($, e) => ({ value: norm(e.path) in files || Object.keys(files).some(f => f.startsWith(`${norm(e.path)}/`)) }))
+  on('fs.read', ($, e) => ({ value: files[norm(e.path)] ?? '' }))
   on('fs.write', ($, e) => {
-    files[e.path] = e.text
+    files[norm(e.path)] = e.text
     return { value: undefined }
   })
-  on('fs.list', () => ({ value: [] }))
+  on('fs.list', ($, e) => ({
+    value: Object.keys(files)
+      .filter(f => f.startsWith(`${norm(e.path)}/`))
+      .map(f => ({ name: f.slice(norm(e.path).length + 1), kind: 'file' as const, size: files[f]!.length })),
+  }))
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
@@ -63,7 +69,7 @@ const world = (on: On) => {
     panes.delete(e.id)
     return { value: undefined }
   })
-  return { clock, panes }
+  return { clock, panes, files }
 }
 
 type Engine = Parameters<Parameters<typeof test>[1] & ((...a: never[]) => unknown)>[0]
@@ -162,4 +168,24 @@ test('1. Plan: a dock press opens the mission pane, a second press closes it', {
   await $.prompt.submit({ text: 'press:mission-control', wait: false, origin: { kind: 'composer' } } as never)
   expect(panes.has('mission')).toBe(false)
   expect((await peek($)).isOpen).toBe(false)
+})
+
+test('4e. a finished task scores its time-left estimates; P then shows how far off they were', { plugins: [PROBE] }, async ($, on) => {
+  const { clock, files } = world(on)
+  await begin($)
+  // No past tasks: the first guess is the default 2 minutes per unit of size, so 4m.
+  await plan($, { title: 'Accuracy', steps: [{ text: 'a', size: 1 }, { text: 'b', size: 1 }] })
+  await clock.advance(60_000)
+  // Step 1 took 1m: the board now says 1m left, which turns out right.
+  await plan($, { done: [1], start: 2 })
+  await clock.advance(60_000)
+  await plan($, { finished: true })
+  await clock.advance(10)
+  // Took 2m. The guesses: 4m left at the start (off by 100%), 1m left after step 1 (spot on); the median miss is 100%.
+  const saved = JSON.parse(files['C:/Users/test/.claude/mods-data/mission-control/session-1.json']!) as { estimateError?: number }[]
+  expect(saved.at(-1)?.estimateError).toBe(1)
+  expect((await summary($)) as unknown).toMatchObject({ isFinished: true, accuracy: { avgErrorPct: 100, tasks: 1 } })
+  // The next task in this project starts out showing it.
+  await plan($, { title: 'Next one', steps: [{ text: 'c', size: 1 }, { text: 'd', size: 1 }] })
+  expect((await summary($)) as unknown).toMatchObject({ title: 'Next one', accuracy: { avgErrorPct: 100, tasks: 1 } })
 })

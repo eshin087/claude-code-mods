@@ -13,8 +13,10 @@
 - Shown as **≈** ("rough") until a step finishes or history exists.
 - Only active time counts. Time waiting for you between turns does not.
 
+**How accurate is it?** Every time the board shows a time left, the mod notes it. When the task finishes, it compares each guess with the time that was actually left and keeps the median miss (a guess of 4m when 2m were left is 100% off; a 1-minute floor stops the last few seconds from skewing it). **P** then shows *Past estimates: off by ~X% on average (N tasks)*, averaged over the project's last 20 tasks. Expect early guesses to be off by 2-3×; they tighten once a step or two finishes, and as the project builds up history.
+
 **Cost:** a short hidden reminder (~60 tokens) is attached to each prompt you send, plus a few small tool calls per task. No extra model calls.
 
-**Data saved:** `~/.claude/mods-data/mission-control/<session>.json`: finished tasks' size and duration, used to calibrate future estimates.
+**Data saved:** `~/.claude/mods-data/mission-control/<session>.json`: finished tasks' size, duration and estimate miss, used to calibrate future estimates and to score them.
 
 **Limits:** the estimate is only as good as the plan. If scope grows, Claude adds steps and the % drops. It's an estimate, not a promise.

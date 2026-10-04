@@ -4,7 +4,7 @@ Two layers:
 - **Automated tests:** run in Claude Code's plugin test runner, with a simulated app and clock. They check the logic.
 - **Manual checklist:** the things only a real window can show, like whether the dock fits on one line at your width, how keys and focus behave in the desktop app, and where panels open.
 
-Last run: **2026-10-04, Claude Code 2.1.286. 38 automated tests, 38 pass.**
+Last run: **2026-10-04, Claude Code 2.1.286. 42 automated tests, 42 pass.**
 
 ## Running the automated tests
 
@@ -15,14 +15,16 @@ $claude = (Get-ChildItem "$env:APPDATA\Claude\claude-code" -Recurse -Filter clau
 foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage-meter') { & $claude plugin test "$env:USERPROFILE\Desktop\Claude Code\mods\$m" }
 ```
 
+A mod switched **off** in the hub is tested as its empty stub, so all its tests fail. Switch it on first, or test a copy with `hooks/hooks.json` set to `{ "modules": ["./register.tsx"] }`.
+
 | Mod | File | Tests |
 |---|---|---|
-| mod-hub | `tests/dock.test.tsx` | 14 (most run on both terminal and desktop) |
-| mission-control | `tests/progress.test.tsx` | 5 |
-| next-tasks | `tests/card.test.tsx` | 10 |
+| mod-hub | `tests/dock.test.tsx` | 13 (terminal buttons, desktop strip and popup, T, folding) |
+| mission-control | `tests/progress.test.tsx` | 6 |
+| next-tasks | `tests/card.test.tsx` | 11 |
 | coach | `tests/toggle.test.tsx` | 4 |
 | pr-desk | `tests/toggle.test.tsx` | 1 |
-| usage-meter | `tests/meter.test.tsx` | 4 |
+| usage-meter | `tests/meter.test.tsx` | 7 |
 
 ## Checklist
 
@@ -32,8 +34,10 @@ foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage
 
 | | Check | How it's tested |
 |---|---|---|
-| ✅ | Badges before anything opens: `Plan`, `Next·3`, `Coach•`, `PRs 2✗`, `Mods` | dock 1 |
-| ✅ | Each button's label gains `● ` while its panel is open and loses it on the second click (all 5, terminal and desktop) | dock 1 |
+| ✅ | Tabs are single letters **P N C PR T M**: buttons on the terminal, one strip drawn by `tabs.tsx` on desktop | dock 1 (both) |
+| ✅ | Amber dots before anything opens: suggestions ready, a new coach tip, a PR in conflict | dock 1 |
+| ✅ | A click turns a tab's dot green while its panel is open; a second click clears it (all 6, terminal and desktop) | dock 1 (both) |
+| ✅ | **T** opens the app's Background tasks pane and closes it; without the app's view tools, a toast says where to find it | dock 5, 5b |
 | ✅ | Plan: a dock press opens the mission pane, a second press closes it, and the open flag follows | mission-control 1 |
 | ✅ | Next: a press folds the card, another reopens it | next-tasks 1 |
 | ✅ | Coach: a press opens and closes the pane; a press meant for another mod leaves it alone | coach 1, 1b |
@@ -46,7 +50,7 @@ foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage
 
 | | Check | How it's tested |
 |---|---|---|
-| ✅ | Plan=p, Next=n, Coach=c, PRs=r, Mods=m, each unique (terminal and desktop) | dock 2 |
+| ✅ | Terminal: Plan=p, Next=n, Coach=c, PRs=r, Tasks=t, Mods=m. Desktop: no shortcuts (no second letter badge) | dock 1 (both) |
 | 👀 ☐ | Click the dock, then each key presses its button | manual. The test kit can't press keys, and the desktop app may not support button shortcuts at all (see L1) |
 | 👀 ☐ | Typing those letters in the prompt box (dock not clicked) only types them | manual |
 
@@ -71,7 +75,20 @@ foreach ($m in 'mod-hub','mission-control','coach','pr-desk','next-tasks','usage
 | ✅ | The chip stays through the end of the reply and while you're idle, then clears when you send your next prompt | mission-control 4b |
 | ✅ | Time stops counting while Claude waits for you | mission-control 4c |
 | ✅ | A task board Claude stops updating clears itself after 2 replies | mission-control 4d |
-| 👀 ☐ | On a long real task the braille bar visibly creeps forward between steps | manual |
+| 👀 ☐ | On a long real task the bar visibly creeps forward between steps | manual |
+| ✅ | A finished task scores its time-left guesses (median miss); P shows *Past estimates: off by ~X%*, and the next task starts with it | mission-control 4e |
+
+### 5. One hover card, the auto-hiding card, and the footer meter
+
+| | Check | How it's tested |
+|---|---|---|
+| ✅ | Hovering any tab shows exactly one card, at the same spot for every tab; leaving the strip removes it | dock 1b |
+| ✅ | Each card's content: P (with accuracy), N, C (with limits and reset time), PR, T (running agents), M | dock 1b |
+| 👀 ☐ | In the app, the card never clips at the top or the right, and no line wraps | manual |
+| ✅ | The next-task card folds to N after 10 s with no answer; reopening gives a fresh 10 s | next-tasks auto-hide |
+| ✅ | The footer meter is a plain SVG (an interactive one isn't drawn in the footer) | meter desktop |
+| ✅ | A new session shows the last reading at once; a 5-hour window that has reset since is left out | meter restore tests |
+| 👀 ☐ | The meter stays in the footer across new sessions and app restarts | manual |
 
 ## Bug log
 
@@ -96,12 +113,18 @@ Found while writing and running these tests on 2026-10-03.
 | B16 | Medium | **Footer bars looked broken up.** Bar characters left visible gaps, and the slot clipped long text. | Fixed: on desktop the footer is one 145 px SVG with solid rounded bars and a tooltip; text bars on the terminal | meter tests |
 | B17 | Medium | **Dock progress was cut off.** The bar, step and time shared one shrinking text with the "now" line, so the numbers were trimmed first. | Fixed: the solid bar, %, step and time never shrink; only the "now" text is trimmed | dock 3a |
 | B18 | Low | **Hover cards grew the whole dock.** The card's reserved space made the dock look like a big window. | Fixed: the card floats above the letter as a popup and the dock stays one line | dock 1b |
+| B19 | High | **Two hover cards at once, clipped, in a different spot per tab.** Each tab had its own popup, and the desktop ignores `right: 0` on absolute boxes, so each card sat where its letter was. | Fixed: the dock draws a single card at a fixed left (dock width − card width), fed by a tab strip that reports which tab the pointer is over | dock 1b |
+| B20 | High | **The footer meter came and went.** The interactive (framed) SVG isn't drawn in the footer slot, and a new session had no reading until its first reply. | Fixed: a plain SVG, and the last reading is saved and shown at start (minus windows that have reset) | meter tests |
+| B21 | High | **The new tab strip didn't load.** The engine finds a strip's code by reading the source for a `Client` element with a literal path; the variable was named `ClientEl`, so it found none. | Fixed: named `Client` | dock 1, 1b |
+| B22 | Medium | **Whole test suites failed for no code reason.** Next tasks, PR Desk and Plan autopilot were switched off in the hub, so the test runner loaded their empty stubs. | Not a bug: documented above. The on/off lines in `hooks.json` are kept out of commits | all next-tasks and pr-desk tests |
 | B8 | Low | **Old suggestions lingered.** `Next·3` stayed in the dock forever after a long turn. | Fixed: suggestions expire after 3 of your prompts | next-tasks "3 prompts later" |
 
 ### Known limits (not bugs, but worth knowing)
 
-- **L1, shortcut keys:** they work only while the dock holds the keyboard (click it first). The desktop app may not support button shortcuts at all. The tests only confirm each button declares a unique key.
+- **L1, shortcut keys:** terminal only, and only while the dock holds the keyboard (click it first). The desktop tabs have none.
 - **L2, where panels open:** a dock press reaches the panel's mod as a signal. Whether the desktop app treats that as your click when deciding where to place the panel is unconfirmed. If a panel can't open, its mod shows a toast with the reason.
 - **L3, fully hiding the dock:** ▾ leaves a one-character `◆ ▸` so you have something to click to unfold. Hiding it completely would need another way back, such as a `/dock` command (not built yet).
 - **L4, progress within a step:** the % inside a step is an estimate based on time, and stops at 90% of that step until Claude marks it done.
+- **L6, the T tab:** it drives the desktop app's own pane through the app's view tools. If a mod can't reach them (an older app, or the terminal), T shows a toast pointing to the menu instead.
+- **L7, estimate accuracy:** it appears only after a task that showed time-left guesses finishes with `finished: true`. A board cleared as stale isn't scored.
 - **L5, test shortcuts:** the stand-in mods replay the real mods' signal handling, and each real mod's own handling is tested in its own folder. Two of the mod tests fake a dock click with a prompt flagged as coming from a mod, because the test kit has no click into another mod's code.

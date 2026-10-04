@@ -15,11 +15,15 @@ const card = atom({ plugin: 'next-tasks', key: 'card' } as const, null)
 const DOCK_FOLDED = { plugin: 'mod-hub', key: 'isCollapsed' } as const
 // Suggestions belong to the turn that made them: after this many prompts without new ones, they go.
 const MAX_PROMPTS = 3
+// An opened card folds back to the dock's N after this long with no answer.
+const AUTO_HIDE_MS = 10_000
 
 type TurnLog = { turnId: string; prompt: string; files: Set<string>; commands: string[] }
 
 let turn: TurnLog | null = null
 let promptsSince = 0
+// Counts card writes, so a fold timer only acts on the opening that set it.
+let openings = 0
 
 const INSTRUCTIONS = [
   'Suggest the 3 best next tasks for this software project, given the work just done.',
@@ -75,6 +79,7 @@ const suggestFromSummary = async ($: EngineInterface, log: TurnLog, answer: stri
       ? { project, items, isLoading: false, source: 'auto' as const, error: null, isOpen: true }
       : null,
   )
+  if (items.length > 0) foldLater($)
 }
 
 const suggestFromConversation = async ($: EngineInterface) => {
@@ -86,6 +91,7 @@ const suggestFromConversation = async ($: EngineInterface) => {
   promptsSince = 0
   const error = r.isAnswered ? (items.length === 0 ? 'the reply had no usable suggestions' : null) : `no answer (${r.reason})`
   await update($, card, () => ({ project, items, isLoading: false, source: 'full' as const, error, isOpen: true }))
+  foldLater($)
 }
 
 // The last attempt's outcome, in mods-data/next-tasks/last.json, for when no card shows.
@@ -93,6 +99,15 @@ const logAttempt = async ($: EngineInterface, entry: Record<string, unknown>) =>
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   const at = new Date(await $.clock.now()).toISOString()
   await $.fs.write(`${home.replace(/\\/g, '/')}/.claude/mods-data/next-tasks/last.json`, JSON.stringify({ at, ...entry }, null, 2))
+}
+
+// Called each time the card opens: it folds to N after AUTO_HIDE_MS unless it
+// was opened again since (a newer timer owns it) or already folded or taken.
+const foldLater = ($: EngineInterface) => {
+  const mine = ++openings
+  $.clock.after(AUTO_HIDE_MS, () => {
+    if (mine === openings) void update($, card, cur => (cur?.isOpen ? { ...cur, isOpen: false } : cur)).catch(() => undefined)
+  })
 }
 
 const take = async ($: EngineInterface, item: NextItem) => {
@@ -161,12 +176,17 @@ export const register: Register = on => {
       const c = await read($, card)
       // Nothing yet: clicking N asks for suggestions now.
       if (!c) $.clock.after(10, () => void suggestFromConversation($).catch(() => update($, card, () => null)))
-      else if (!c.isLoading) await update($, card, cur => (cur ? { ...cur, isOpen: !cur.isOpen } : cur))
+      else if (!c.isLoading) {
+        await update($, card, cur => (cur ? { ...cur, isOpen: !cur.isOpen } : cur))
+        if (!c.isOpen) foldLater($)
+      }
     } else if (sig.action === 'review') {
       // Review: open the card, or work out suggestions when there are none yet.
       const c = await read($, card)
-      if (c && !c.isLoading) await update($, card, cur => (cur ? { ...cur, isOpen: true } : cur))
-      else if (!c) $.clock.after(10, () => void suggestFromConversation($).catch(() => update($, card, () => null)))
+      if (c && !c.isLoading) {
+        await update($, card, cur => (cur ? { ...cur, isOpen: true } : cur))
+        foldLater($)
+      } else if (!c) $.clock.after(10, () => void suggestFromConversation($).catch(() => update($, card, () => null)))
     }
     return done
   })

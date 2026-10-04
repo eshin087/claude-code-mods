@@ -4,12 +4,12 @@ Small plugins of function hooks that change how [Claude Code](https://docs.claud
 
 | Mod | What it does | Use it with |
 |---|---|---|
-| mod-hub | The dock (**P N C PR M ▾**), hover cards, the mods page with on/off switches | the dock, `/mods`, `/mods-review` |
-| mission-control | Live plan, % done, time left and a "now" line for long tasks | **P**, `/mission` |
-| next-tasks | Three suggested next tasks after longer replies | **N**, `/next` |
+| mod-hub | The dock (**P N C PR T M ▾**), one hover card, a one-click Background tasks button, the mods page with on/off switches | the dock, `/mods`, `/mods-review` |
+| mission-control | Live plan, % done, time left and a "now" line for long tasks, plus how far off past estimates were | **P**, `/mission` |
+| next-tasks | Three suggested next tasks after longer replies; folds away after 10 s untouched | **N**, `/next` |
 | coach | Cache, context, cost, habits and one "do next", plus architect lessons | **C**, `/coach` |
 | pr-desk | Your open PRs with checks, merge state and preview links | **PR**, `/prs` |
-| usage-meter | 5-hour and weekly usage bars in the footer (hover for reset times) | footer |
+| usage-meter | 5-hour and weekly usage bars in the footer, always on (reset times in the **C** card) | footer |
 | turn-timer | How long every prompt took, saved in the chat, plus history | `/timings`, `/timings all` |
 | collision-guard | Warns when parallel sessions edit the same file or version | toasts, `/collisions` |
 | plan-autopilot | Plans on Sonnet, builds on Opus once you approve | Plan mode |

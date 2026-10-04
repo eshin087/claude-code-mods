@@ -181,3 +181,20 @@ test('clicking N with nothing yet asks for suggestions', { plugins: [DOCK, PROBE
   expect((await peek($))?.items.length).toBe(3)
   expect((await peek($))?.isOpen).toBe(true)
 })
+
+test('an opened card folds to N after 10 seconds with no answer; each opening gets its own 10 seconds', { plugins: [DOCK, PROBE] }, async ($, on) => {
+  const clock = world(on)
+  await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
+  await longTurn($, clock, 90_000)
+  await clock.advance(9_000)
+  expect((await peek($))?.isOpen).toBe(true)
+  await clock.advance(1_100)
+  expect((await peek($))?.isOpen).toBe(false)
+  // Reopened with N: a fresh 10 seconds, and the old timer is spent.
+  await press($, 'press:next-tasks')
+  await clock.advance(6_000)
+  expect((await peek($))?.isOpen).toBe(true)
+  await clock.advance(4_100)
+  expect((await peek($))?.isOpen).toBe(false)
+  expect((await peek($))?.items.length).toBe(3)
+})

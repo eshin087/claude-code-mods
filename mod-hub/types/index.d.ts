@@ -13,6 +13,9 @@ export type HubMod = {
  */
 export type HubSignal = { seq: number; target: string; action?: 'toggle' | 'review' }
 
+/** One background task for the T tab: a running agent, or a shell/monitor/workflow from the last reply. */
+export type HubTask = { id: string; kind: string; label: string; status: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'mod-hub': {
@@ -22,6 +25,11 @@ declare module 'claude-code' {
       signal: HubSignal | null
       isCollapsed: boolean
       isOpen: boolean
+      /** The tab the pointer is over, whose card the dock shows; null for none. */
+      peek: string | null
+      tasks: HubTask[]
+      /** Whether the app's own Background tasks pane is open. */
+      tasksOpen: boolean
     }
   }
 }

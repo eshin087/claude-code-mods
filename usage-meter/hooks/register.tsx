@@ -4,12 +4,15 @@ import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 import type { MeterLimit } from '../types'
 
 // The meter draws itself in the footer's mode slot (right of the prompt
-// footer). On the desktop that slot fits ~145 px, so the meter is one small SVG:
-// a dot for the worse window, then solid rounded bars filled to the % (cyan for
-// the 5-hour window, violet for the week), with a native tooltip that has the
-// reset times. The terminal draws the same in characters, with room for the
-// reset time. A surface without the footer slot never asks for it, so until it
-// does, a short line goes to the plain-text status line.
+// footer). On the desktop that slot fits ~145 px, so the meter is one small SVG
+// image: a dot for the worse window, then solid rounded bars filled to the %
+// (cyan for the 5-hour window, violet for the week). It is a plain image: the
+// interactive kind (with a tooltip) needs a frame the footer does not draw. The
+// reset times are in the dock's C card instead. The terminal draws the same in
+// characters, with room for the reset time. The last reading is kept in the
+// store, so a new session shows the meter before its first reply. A surface
+// without the footer slot never asks for it; until it does, a short line goes
+// to the plain-text status line.
 
 const WARN_AT = [75, 90]
 const AGENT_WARN_AT = 80
@@ -42,8 +45,6 @@ const bar = (pct: number, cells: number) => {
   return { fill, rest: '━'.repeat(Math.max(0, cells - fill.length)) }
 }
 
-const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
 // The desktop footer: 145 x 14 px. Text is drawn in the SVG too, so the width is exact.
 const footerSvg = (f: MeterLimit | undefined, w: MeterLimit | undefined, now: number) => {
   const worst = Math.max(f?.percentUsed ?? 0, w?.percentUsed ?? 0)
@@ -58,7 +59,7 @@ const footerSvg = (f: MeterLimit | undefined, w: MeterLimit | undefined, now: nu
     w ? `Weekly: ${Math.round(w.percentUsed)}% used${resetsIn(w, now) ? `, resets in ${resetsIn(w, now)}` : ''}` : '',
     'Green under 60% · yellow 60-85% · red over 85%',
   ].filter(Boolean).join('\n')
-  let body = `<title>${esc(tip)}</title><circle cx="3" cy="7" r="2.5" fill="${LEVEL_HEX[level(worst)]}"/>`
+  let body = `<circle cx="3" cy="7" r="2.5" fill="${LEVEL_HEX[level(worst)]}"/>`
   if (f) {
     body += `<text x="9" y="7" fill="${C5H}" font-weight="600" ${font}>5h</text>` + barAt(24, 34, f.percentUsed, C5H) +
       `<text x="61" y="7" fill="${LEVEL_HEX[level(f.percentUsed)]}" ${font}>${Math.round(f.percentUsed)}%</text>`
@@ -106,10 +107,25 @@ const warn = async ($: EngineInterface) => {
   $.ui.toast(`5-hour window at ${Math.round(f.percentUsed)}%${r ? ` · resets in ${r}` : ''}`, { timeoutMs: 8000 })
 }
 
+// Before a session's first reply there is no reading: show the last one, minus
+// any window that has reset since (its old % would be wrong).
+const restore = async ($: EngineInterface) => {
+  const saved = (await $.store.get('last')) as MeterLimit[] | undefined
+  if (!Array.isArray(saved)) return
+  const now = await $.clock.now()
+  const live = saved.filter(l => !l.resetsAt || Date.parse(l.resetsAt) > now)
+  if (live.length > 0) {
+    await update($, limitsRef, () => live)
+    await showPlain($)
+  }
+}
+
 const take = async ($: EngineInterface, fresh: readonly SessionRateLimit[]) => {
   if (fresh.length === 0) return
   const list: MeterLimit[] = fresh.map(l => ({ kind: l.kind, percentUsed: l.percentUsed, ...(l.resetsAt ? { resetsAt: l.resetsAt } : {}) }))
   await update($, limitsRef, () => list)
+  // The windows are the account's, not the session's: the next session starts from this.
+  await $.store.set('last', list)
   await showPlain($)
   await warn($)
 }
@@ -117,7 +133,9 @@ const take = async ($: EngineInterface, fresh: readonly SessionRateLimit[]) => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await take($, (await $.session.usage()).rateLimits)
+    const fresh = (await $.session.usage()).rateLimits
+    if (fresh.length > 0) await take($, fresh)
+    else await restore($)
     // Keep "resets in" current, and drop the plain line once the footer draws the bars.
     $.clock.every(60_000, () => $.ui.invalidate('ui.render'))
     $.clock.every(5_000, () => void showPlain($))
@@ -146,7 +164,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="row" gap={1} alignItems="center">
           {e.props.modes.length > 0 && <Text dimColor>{e.props.modes.join(' & ')}</Text>}
-          <Svg source={svg.source} alt={svg.alt} width={145} height={14} isInteractive />
+          <Svg source={svg.source} alt={svg.alt} width={145} height={14} />
         </Box>
       )
     }

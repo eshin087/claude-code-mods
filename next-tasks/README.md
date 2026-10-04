@@ -11,7 +11,8 @@ Next                                   ✕
 ```
 - **Click the boxed number or the task** to do it: its full instruction goes into your prompt box, or is sent where the app has no box it can fill.
 - **✕** dismisses the suggestions.
-- The card folds into the dock's **Next·3** button when you send your next prompt; click that to reopen it. Suggestions expire after 3 of your prompts.
+- **Auto-hide:** if you don't answer within **10 seconds**, the card folds into the dock's **N** (amber dot). Click **N** to bring it back, with a fresh 10 seconds each time.
+- It also folds when you send your next prompt. Suggestions expire after 3 of your prompts.
 - **`/next`** asks over the whole conversation instead of the last turn: smarter, any time.
 
 **How it works:**
@@ -24,4 +25,4 @@ Next                                   ✕
 
 **Data saved:** none.
 
-**Settings:** `MIN_TURN_MS` and `MODEL` at the top of `hooks/register.tsx`.
+**Settings:** `MIN_TURN_MS`, `MODEL` and `AUTO_HIDE_MS` at the top of `hooks/register.tsx`.

@@ -27,7 +27,11 @@ type PlanInput = {
   finished?: boolean
 }
 
-type MissionRecord = { project: string; title: string; units: number; activeMs: number; at: number }
+type MissionRecord = { project: string; title: string; units: number; activeMs: number; at: number; estimateError?: number }
+// Past tasks a project's accuracy averages over.
+const ACCURACY_TASKS = 20
+// Under a minute left, a few seconds off is a large share: the floor keeps the score fair.
+const ERROR_FLOOR_MS = 60_000
 
 type Progress = {
   pct: number
@@ -172,23 +176,51 @@ const loadRecords = async ($: EngineInterface): Promise<MissionRecord[]> => {
   return out.sort((a, b) => a.at - b.at)
 }
 
-const calibrationFor = async ($: EngineInterface, project: string) => {
-  const all = (await loadRecords($)).filter(r => r.units > 0 && r.activeMs > 0)
+const calibrationFor = (records: MissionRecord[], project: string) => {
+  const all = records.filter(r => r.units > 0 && r.activeMs > 0)
   const mine = all.filter(r => r.project === project)
   const pool = (mine.length >= 3 ? mine : all).slice(-20).map(r => r.activeMs / r.units)
   if (pool.length === 0) return null
   return [...pool].sort((a, b) => a - b)[Math.floor(pool.length / 2)]!
 }
 
+// How far off the board's time-left estimates were, scored at the finish: the
+// median, over every estimate given, of |estimated - actual time left| / actual.
+const scoreEstimates = (m: Mission, totalMs: number) => {
+  const errors = (m.estimates ?? [])
+    .filter(e => e.atActive < totalMs)
+    .map(e => Math.abs(e.leftMs - (totalMs - e.atActive)) / Math.max(totalMs - e.atActive, ERROR_FLOOR_MS))
+  if (errors.length === 0) return null
+  return [...errors].sort((a, b) => a - b)[Math.floor(errors.length / 2)]!
+}
+
+// The project's average miss over its last scored tasks, for "Past estimates: off by ~X%".
+const accuracyOf = (records: MissionRecord[], project: string) => {
+  const scored = records.filter(r => r.project === project && typeof r.estimateError === 'number').slice(-ACCURACY_TASKS)
+  if (scored.length === 0) return null
+  const avg = scored.reduce((a, r) => a + (r.estimateError ?? 0), 0) / scored.length
+  return { avgErrorPct: Math.round(avg * 100), tasks: scored.length }
+}
+
+// Saves the finished task, then shows the project's accuracy with it counted.
+const finishRecord = async ($: EngineInterface, m: Mission) => {
+  await saveRecord($, m)
+  const accuracy = accuracyOf(await loadRecords($), m.project)
+  await update($, mission, cur => (cur && cur.id === m.id ? { ...cur, accuracy } : cur))
+  await publish($)
+}
+
 const saveRecord = async ($: EngineInterface, m: Mission) => {
   const file = `${await dataDir($)}/${await $.session.id()}.json`
   const list = (await $.fs.exists(file)) ? (JSON.parse(await $.fs.read(file)) as MissionRecord[]) : []
+  const err = scoreEstimates(m, m.activeMs)
   list.push({
     project: m.project,
     title: m.title,
     units: m.steps.reduce((a, s) => a + s.size, 0),
     activeMs: m.activeMs,
     at: await $.clock.now(),
+    ...(err === null ? {} : { estimateError: Math.round(err * 1000) / 1000 }),
   })
   await $.fs.write(file, JSON.stringify(list.slice(-500)))
 }
@@ -210,6 +242,7 @@ const publish = async ($: EngineInterface) => {
     elapsedMs: p.elapsed,
     isFinished: m.isFinished,
     now: m.now,
+    accuracy: m.accuracy ?? null,
   }
   await update($, summaryRef, () => fresh)
 }
@@ -291,6 +324,7 @@ export const register: Register = on => {
 
     if (Array.isArray(input.steps) && input.steps.length > 0) {
       const project = projectOf(await $.session.cwd())
+      const records = await loadRecords($).catch(() => [])
       m = {
         id: String(now),
         title: oneLine(input.title ?? 'Current task', 60),
@@ -301,7 +335,9 @@ export const register: Register = on => {
         activeMs: 0,
         runningSince: now,
         isFinished: false,
-        calibration: await calibrationFor($, project),
+        calibration: calibrationFor(records, project),
+        estimates: [],
+        accuracy: accuracyOf(records, project),
       }
     }
     if (!m) return { result: 'No plan yet: call again with a title and steps.' }
@@ -335,6 +371,11 @@ export const register: Register = on => {
       const last = upd.notes.at(-1)
       upd = { ...upd, now: text, notes: last?.text === text ? upd.notes : [...upd.notes, { atActive: t, text }].slice(-12) }
     }
+    // The time left the board shows now: kept, to score against the real finish.
+    if (input.finished !== true) {
+      const est = progress(upd, now).leftMs
+      if (est !== null) upd = { ...upd, estimates: [...(upd.estimates ?? []), { atActive: t, leftMs: Math.round(est) }].slice(-40) }
+    }
     if (input.finished === true) {
       upd = {
         ...upd,
@@ -345,7 +386,7 @@ export const register: Register = on => {
         now: '',
       }
       const done = upd
-      void saveRecord($, done).catch(() => undefined)
+      void finishRecord($, done).catch(() => undefined)
     }
 
     const final = upd
@@ -412,6 +453,11 @@ export const register: Register = on => {
             {m.isFinished ? ' · finished' : p.leftMs === null ? '' : ` · ${p.isRough ? 'about' : '~'} ${fmtLeft(p.leftMs)} left`}
             {p.isRough && !m.isFinished ? ' (rough until a step finishes)' : ''}
           </Text>
+          {m.accuracy && (
+            <Text dimColor>
+              Past estimates here: off by ~{m.accuracy.avgErrorPct}% on average ({m.accuracy.tasks} {m.accuracy.tasks === 1 ? 'task' : 'tasks'})
+            </Text>
+          )}
         </Box>
         <Box flexDirection="column">
           {m.steps.map((s, i) => {

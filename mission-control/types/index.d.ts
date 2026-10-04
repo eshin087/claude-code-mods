@@ -23,6 +23,10 @@ export type Mission = {
   isFinished: boolean
   /** ms per unit of step size from earlier missions, when there are any. */
   calibration: number | null
+  /** Each time-left estimate the board gave (active ms in, ms left), scored when the task finishes. */
+  estimates?: { atActive: number; leftMs: number }[]
+  /** How far off this project's past estimates were; null until a task with estimates finishes. */
+  accuracy?: { avgErrorPct: number; tasks: number } | null
 }
 
 /** What the dock shows, refreshed every second while a mission runs. */
@@ -35,6 +39,8 @@ export type MissionSummary = {
   elapsedMs: number
   isFinished: boolean
   now: string
+  /** How far off past time-left estimates were in this project; null until a task with estimates finishes. */
+  accuracy?: { avgErrorPct: number; tasks: number } | null
 }
 
 declare module 'claude-code' {

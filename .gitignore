@@ -7,3 +7,9 @@ pr-desk/config.json
 .claude/
 node_modules/
 *.bak
+
+# Local build helpers (type-check config, scratch scripts).
+.dev/
+
+# The hub writes these when a mod is switched off (see mod-hub/README.md).
+**/hooks/off.tsx
