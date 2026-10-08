@@ -143,10 +143,11 @@ const world = (on: On, store: Record<string, unknown> = {}, opts: WorldOptions =
   })
   const panes = new Set<string>()
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  // The engine draws nothing of its own in the band.
+  // The engine draws nothing of its own in the band; keyed so a test can find
+  // where the dock puts the engine's node.
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
-    return <Box />
+    return <Box key="engine" />
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   // No mods folder and no off list (the hub's on/off has its own tests).
@@ -193,6 +194,17 @@ const nodesOf = (n: unknown, out: Node[] = []): Node[] => {
     for (const c of (n as Node).children ?? []) nodesOf(c, out)
   }
   return out
+}
+// The Boxes above the engine's own node in a drawing (its stand-in is keyed `engine`).
+const aboveEngine = (n: unknown, path: Node[] = []): Node[] | null => {
+  if (!n || typeof n !== 'object') return null
+  const node = n as Node
+  if (node.props?.key === 'engine') return path
+  for (const c of node.children ?? []) {
+    const found = aboveEngine(c, [...path, node])
+    if (found) return found
+  }
+  return null
 }
 const textIn = (found: { children: unknown[] } | undefined) => (found?.children ?? []).map(textOf).join(' ').replace(/\s+/g, ' ')
 
@@ -288,6 +300,23 @@ test('[desktop] 1b. hovering shows ONE popup, always in the same place, for whic
   expect(await ui.find({ key: 'dock:popup' })).toBeUndefined()
   expect((await root()).props?.minHeight).toBeUndefined()
 })
+
+// The real engine refuses the whole dock ("engine node under a Box with prop
+// position") when a positioned Box holds what next(e) returned.
+for (const surface of SURFACES) {
+  test(`[${surface}] 1c. the engine's own node in the band is never under a positioned Box, card or no card`, { plugins: PEERS }, async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: 'C:/x/gcdAtlas', surface, isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'mod-hub', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, maxRows: 30, scroll: { offset: 0, bodyRows: 29 } } })
+    const positioned = async () => (aboveEngine(await ui.drawn()) ?? [{ type: 'missing' }]).filter(n => n.type === 'missing' || n.props?.position !== undefined).map(n => n.type)
+    expect(await positioned()).toEqual([])
+    if (surface === 'desktop') {
+      await ui.pointer({ type: 'move', x: AT.coach, y: 0 })
+      expect(await ui.find({ key: 'dock:popup' })).toBeDefined()
+      expect(await positioned()).toEqual([])
+    }
+  })
+}
 
 test("5. T opens the app's Background tasks pane and closes it", { plugins: PEERS }, async ($, on) => {
   const { appPanes } = world(on)

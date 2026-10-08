@@ -4,7 +4,7 @@ Two layers:
 - **Automated tests:** run in Claude Code's plugin test runner, with a simulated app and clock. They check the logic.
 - **Manual checklist:** the things only a real window can show, like whether the dock fits on one line at your width, how keys and focus behave in the desktop app, and where panels open.
 
-Last run: **2026-10-04, Claude Code 2.1.286. 50 automated tests, 50 pass.**
+Last run: **2026-10-08, Claude Code 2.1.286. 52 automated tests, 52 pass.**
 
 ## Running the automated tests
 
@@ -19,7 +19,7 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 
 | Mod | File | Tests |
 |---|---|---|
-| mod-hub | `tests/dock.test.tsx` | 13 (terminal buttons, desktop strip and popup, T, folding) |
+| mod-hub | `tests/dock.test.tsx` | 15 (terminal buttons, desktop strip and popup, the engine's node never under a positioned Box, T, folding) |
 | mod-hub | `tests/onoff.test.tsx` | 8 (turn off and on, a page that's behind, refused at load, moving old stub switches, load order, removed mod folders) |
 | mission-control | `tests/progress.test.tsx` | 6 |
 | next-tasks | `tests/card.test.tsx` | 11 |
@@ -134,6 +134,7 @@ Found while writing and running these tests on 2026-10-03.
 | B22 | Medium | **Whole test suites failed for no code reason.** Next tasks, PR Desk and Plan autopilot were switched off in the hub, so the test runner loaded their empty stubs. | Fixed (2026-10-04): switches live in `mods-data/mod-hub/off.json` and the hub applies them at load, so tests always run the real code | all next-tasks and pr-desk tests, run while switched off |
 | B23 | Medium | **On/off leaked into git.** A switch rewrote the tracked `hooks.json`, so it showed in `git status`, and committing it would switch that mod off on every computer. | Fixed with B22: a switch changes no tracked file; old stub switches are moved to the list by themselves | onoff 6a, 6e |
 | B24 | High | **Hover card clipped at the top.** The band clips absolute boxes to itself, and it was only as tall as its content (the next-task card and the dock row), so a card placed above the dock lost its title and first lines. | Fixed: the card sits just above the dock row, and the band grows to fit it only while hovering (extra rows at the top, so the dock doesn't move); a short band cuts the card's lines | dock 1b |
+| B25 | High | **The dock vanished from every chat** (B24's fix). The outer Box got `position` while holding the engine's own node for the band, which the engine refuses: "ui.render (AbovePrompt) refused: engine node under a Box with prop \"position\"; the engine drew its own". The test kit draws a plain Box there, so no test saw it. | Fixed: no Box above the engine's node has `position`; the card is placed from inside the dock row, which holds no engine node | dock 1c (both surfaces) |
 | B8 | Low | **Old suggestions lingered.** `Next·3` stayed in the dock forever after a long turn. | Fixed: suggestions expire after 3 of your prompts | next-tasks "3 prompts later" |
 
 ### Known limits (not bugs, but worth knowing)

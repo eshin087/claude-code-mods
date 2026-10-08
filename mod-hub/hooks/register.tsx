@@ -545,8 +545,10 @@ export const register: Register = on => {
     add('mods', 'M', 'm', open.mods, false, () => toggleHub($))
 
     // The one card, for the tab the pointer is over. The band clips absolute
-    // boxes to itself, so the card sits just above the dock row (bottom 1) and
-    // the band grows to fit it only while it shows, the extra rows at the top.
+    // boxes to itself, so the card sits just above the dock row (bottom 1 of
+    // the row) and the band grows to fit it only while it shows, the extra rows
+    // at the top. No Box above `below` may have `position`: the engine refuses
+    // a tree that puts its own node under one, and draws none of the dock.
     const shown = Client && peeking && tabs.some(t => t.id === peeking) ? build(peeking) : null
     const accent = shown && peeking ? ACCENT[peeking as keyof typeof ACCENT] : '#9ca3af'
     const cardLines = shown ? shown.lines.slice(0, Math.max(1, e.props.maxRows - 4)) : []
@@ -572,9 +574,10 @@ export const register: Register = on => {
     )
 
     return (
-      <Box flexDirection="column" position="relative" justifyContent="flex-end" minHeight={shown ? cardRows + 1 : undefined}>
+      <Box flexDirection="column" justifyContent="flex-end" minHeight={shown ? cardRows + 1 : undefined}>
         {below}
         <Box key="dock:row" flexDirection="row" gap={1} flexWrap="nowrap" alignItems="center" position="relative">
+          {popup}
           <Box key="dock:status" flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden" alignItems="center">
             {mission && !mission.isFinished && (
               <Box key="dock:progress" flexDirection="row" gap={1} flexShrink={0} alignItems="center">
@@ -610,7 +613,6 @@ export const register: Register = on => {
             <Button key="dock:collapse" label="▾" plain onPress={() => collapse($, true)} />
           </Box>
         </Box>
-        {popup}
       </Box>
     )
   })
