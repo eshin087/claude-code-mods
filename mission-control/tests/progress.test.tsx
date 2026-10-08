@@ -212,18 +212,23 @@ const midTask = async ($: Engine, clock: { advance: (ms: number) => Promise<void
   await clock.advance(into)
 }
 
-test('5a. desktop: the working row is the animated row: steps, the step name, time and the now line typed in', { plugins: [PROBE] }, async ($, on) => {
+test('5a. desktop: the working row is the animated row: %, a short bar, the step, time, and the now line typed in on one line', { plugins: [PROBE] }, async ($, on) => {
   const { clock } = world(on)
   await midTask($, clock, 5_000)
   const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
   const row = await ui.find({ key: 'mission:row' })
   expect(row?.type).toBe('Client')
   expect(String(row?.props.module)).toMatch(/row\.tsx$/)
-  expect(row?.props.props).toMatchObject({ steps: ['done', 'doing', 'todo'], stepNo: 2, total: 3, step: 'wire the row', elapsed: '15s', pace: 'ok', now: 'drawing the bar' })
+  expect(row?.props.props).toMatchObject({ stepNo: 2, total: 3, elapsed: '15s', pace: 'ok', text: 'drawing the bar', kind: 'now' })
   // Typing starts from nothing, then the whole line is there.
   expect(textOf(await ui.drawn({ in: 'mission:row' }))).not.toContain('drawing the bar')
   await ui.advance(2_000)
-  expect(textOf(await ui.drawn({ in: 'mission:row' }))).toMatch(/\d+%━{14}●◉○2\/3 wire the row·15s·~\S+ left› drawing the bar$/)
+  expect(textOf(await ui.drawn({ in: 'mission:row' }))).toMatch(/^.\d+%━{6}2\/3·15s·~\S+ left› drawing the bar$/)
+  // The line is one Text in a one-row box, so it ends in "…" rather than wrapping.
+  const line = texts(await ui.drawn({ in: 'mission:row' })).find(t => textOf(t).includes('drawing the bar'))
+  expect(line?.props?.wrap).toBe('truncate-end')
+  expect(nodesOf(line).filter(n => n.type === 'Text').length).toBe(1)
+  expect(nodesOf(await ui.drawn({ in: 'mission:row' })).filter(n => n.type === 'Box' && nodesOf(n).includes(line!)).every(b => b.props?.height === 1)).toBe(true)
 })
 
 test('5b. desktop: the row animates on its own frame clock: the spinner turns and the colors move each frame', { plugins: [PROBE] }, async ($, on) => {
@@ -261,4 +266,52 @@ test('5d. terminal: the engine keeps its own working line, its text rewritten wi
   const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'terminal', component: 'Spinner', props: SPINNER })
   expect(await ui.find({ key: 'mission:row' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^\d+% · step 2\/3 · 15s · ~\S+ left — drawing the bar$/ })).toBeDefined()
+})
+
+// A model response that thinks in pieces, then calls a tool.
+const thinks = (on: On, pieces: string[]) =>
+  on('turn.step', async function* ($, e) {
+    for (const text of pieces) yield { kind: 'thinking' as const, index: 0, text }
+    yield { kind: 'stop' as const, stopReason: 'tool_use', usage: null }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'tool_use', usage: null }
+  })
+const step = ($: Engine) => {
+  const stream = $.turn.step({ turnId: 't1', index: 1, model: 'claude-opus-5-5', messageCount: 3 } as never) as AsyncIterable<unknown>
+  return (async () => {
+    const seen: unknown[] = []
+    for await (const chunk of stream) seen.push(chunk)
+    return seen
+  })()
+}
+
+test('5e. while Claude thinks, the row shows its latest thought live; otherwise its now line', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  thinks(on, ['The API docs list three order types. ', 'Paper trading needs its own key, so I should ', 'check the sandbox limits next'])
+  await midTask($, clock, 5_000)
+  // Every piece reaches the transcript untouched.
+  expect((await step($)).filter(c => (c as { kind: string }).kind === 'thinking').length).toBe(3)
+  const thinking = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: { ...SPINNER, mode: 'thinking' } })
+  expect((await thinking.find({ key: 'mission:row' }))?.props.props).toMatchObject({
+    kind: 'thought',
+    text: 'Paper trading needs its own key, so I should check the sandbox limits next',
+  })
+  expect(textOf(await thinking.drawn({ in: 'mission:row' }))).toMatch(/✻ Paper trading needs its own key, so I should check the sandbox limits next$/)
+  const working = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
+  expect((await working.find({ key: 'mission:row' }))?.props.props).toMatchObject({ kind: 'now', text: 'drawing the bar' })
+  // A new turn starts with no thought.
+  await finish($, 't1')
+  await $.turn.start({ text: 'go on', turnId: 't2' })
+  const next = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: { ...SPINNER, mode: 'thinking' } })
+  expect((await next.find({ key: 'mission:row' }))?.props.props).toMatchObject({ kind: 'now' })
+})
+
+test('5f. with no now line, the row says what the app says the step is doing, else the step name', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await begin($)
+  await plan($, { title: 'Ship it', steps: [{ text: 'read the code', size: 1 }, { text: 'wire the row', size: 1 }], start: 1 })
+  await clock.advance(1_000)
+  const app = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: { ...SPINNER, word: 'Creating notes.md' } })
+  expect((await app.find({ key: 'mission:row' }))?.props.props).toMatchObject({ kind: 'app', text: 'Creating notes.md' })
+  const bare = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
+  expect((await bare.find({ key: 'mission:row' }))?.props.props).toMatchObject({ kind: 'step', text: 'read the code' })
 })
