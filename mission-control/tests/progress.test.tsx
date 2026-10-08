@@ -189,3 +189,76 @@ test('4e. a finished task scores its time-left estimates; P then shows how far o
   await plan($, { title: 'Next one', steps: [{ text: 'c', size: 1 }, { text: 'd', size: 1 }] })
   expect((await summary($)) as unknown).toMatchObject({ title: 'Next one', accuracy: { avgErrorPct: 100, tasks: 1 } })
 })
+
+// The working row, as the engine hands it to the hooks.
+const SPINNER = { word: 'Working', message: null, suffix: '…', mode: 'tool-use' } as const
+type RowNode = { type: string; props?: Record<string, unknown>; children?: unknown[] }
+const nodesOf = (n: unknown, out: RowNode[] = []): RowNode[] => {
+  if (n && typeof n === 'object') {
+    out.push(n as RowNode)
+    for (const c of (n as RowNode).children ?? []) nodesOf(c, out)
+  }
+  return out
+}
+const textOf = (n: unknown): string => (typeof n === 'string' ? n : n && typeof n === 'object' ? ((n as RowNode).children ?? []).map(textOf).join('') : '')
+const texts = (n: unknown) => nodesOf(n).filter(x => x.type === 'Text')
+
+// Step 1 took 10 s, so the pace is 10 s per unit; step 2 has run `into` ms.
+const midTask = async ($: Engine, clock: { advance: (ms: number) => Promise<void> }, into: number) => {
+  await begin($)
+  await plan($, { title: 'Ship it', steps: [{ text: 'read the code', size: 1 }, { text: 'wire the row', size: 1 }, { text: 'test it', size: 1 }], start: 1 })
+  await clock.advance(10_000)
+  await plan($, { done: [1], start: 2, now: 'drawing the bar' })
+  await clock.advance(into)
+}
+
+test('5a. desktop: the working row is the animated row: steps, the step name, time and the now line typed in', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 5_000)
+  const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
+  const row = await ui.find({ key: 'mission:row' })
+  expect(row?.type).toBe('Client')
+  expect(String(row?.props.module)).toMatch(/row\.tsx$/)
+  expect(row?.props.props).toMatchObject({ steps: ['done', 'doing', 'todo'], stepNo: 2, total: 3, step: 'wire the row', elapsed: '15s', pace: 'ok', now: 'drawing the bar' })
+  // Typing starts from nothing, then the whole line is there.
+  expect(textOf(await ui.drawn({ in: 'mission:row' }))).not.toContain('drawing the bar')
+  await ui.advance(2_000)
+  expect(textOf(await ui.drawn({ in: 'mission:row' }))).toMatch(/\d+%━{14}●◉○2\/3 wire the row·15s·~\S+ left› drawing the bar$/)
+})
+
+test('5b. desktop: the row animates on its own frame clock: the spinner turns and the colors move each frame', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 5_000)
+  const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
+  const seen = new Set<string>()
+  const palettes = new Set<string>()
+  for (let i = 0; i < 6; i++) {
+    const drawn = await ui.drawn({ in: 'mission:row' })
+    seen.add(textOf(texts(drawn)[0]))
+    palettes.add(JSON.stringify(texts(drawn).map(t => t.props?.color)))
+    await ui.advance(80)
+  }
+  expect(seen.size).toBe(6)
+  expect(palettes.size).toBe(6)
+})
+
+test('5c. desktop: a step that runs past its share turns time left amber, saying so', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 30_000)
+  const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'desktop', component: 'Spinner', props: SPINNER })
+  expect((await ui.find({ key: 'mission:row' }))?.props.props).toMatchObject({ pace: 'slow' })
+  const late = texts(await ui.drawn({ in: 'mission:row' })).find(t => textOf(t).includes('step running long'))
+  expect(late?.props?.color).toBe('#facc15')
+})
+
+test('5d. terminal: the engine keeps its own working line, its text rewritten with the progress', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{String((e.props as { message?: string | null }).message ?? '')}</Text>
+  })
+  await midTask($, clock, 5_000)
+  const ui = await $.ui.mount({ plugin: 'mission-control', surface: 'terminal', component: 'Spinner', props: SPINNER })
+  expect(await ui.find({ key: 'mission:row' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^\d+% · step 2\/3 · 15s · ~\S+ left — drawing the bar$/ })).toBeDefined()
+})

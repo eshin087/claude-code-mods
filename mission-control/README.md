@@ -4,7 +4,16 @@
 
 **Where you see it:**
 - **The dock** (Mod Hub's line above the prompt): `◎ 64% ⣿⣿⣿⣿⣷⣀⣀ 3/5 ~8m — <now>` while working, then `✓ done 6m53s` until your next prompt.
-- **The "Working…" row** shows the same while Claude works.
+- **The "Working…" row** while Claude works. On the desktop it's an animated, colored line drawn by `hooks/row.tsx` on its own frame clock:
+  ```
+  ⠹  37% ━━━━━━━━━━━━━━ ●◉○○ 2/4 Check what the site sends · 4m 33s · ~12m left › Browser not signed in…
+  ```
+  - a spinner that cycles from cyan to violet, and the % done;
+  - a bar shaded cyan to violet with a glint sweeping through it; the cell being filled pulses;
+  - one dot per step: green done, pulsing cyan current, grey to do; then the current step's number and name;
+  - time on the task, and time left: green on pace, amber with *step running long* once the current step has run past its share, grey while it's a rough guess;
+  - the "now" line, typed in each time it changes. With no "now" line, it shows what the app says the step is doing (`Creating notes.md`).
+  On the terminal the row keeps the engine's own animation, with its text rewritten: `37% · step 2/4 · 4m 33s · ~12m left — <now>`.
 - **Plan** in the dock (or `/mission`) toggles a pane with the checklist (✓ done with time taken, ▶ current, ○ to do) and a **Trail**: the last "now" lines with timestamps, a condensed history of the work.
 
 **How it works:** the mod gives Claude a tool, `mcp__mission-control__plan`. For tasks with 3+ steps or over ~2 minutes, Claude posts a plan (3-8 steps, each sized 1-3), then updates it as steps start and finish. The mod does the maths:

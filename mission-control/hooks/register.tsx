@@ -38,6 +38,8 @@ type Progress = {
   elapsed: number
   leftMs: number | null
   isRough: boolean
+  /** The current step has run past the time its size gives it at this pace. */
+  isOver: boolean
   stepNo: number
   total: number
 }
@@ -147,7 +149,8 @@ const progress = (m: Mission, now: number): Progress => {
   const pct = m.isFinished ? 1 : Math.min(0.99, (doneUnits + partial) / units)
   const leftMs = m.isFinished ? 0 : Math.max(0, (units - doneUnits - partial) * pace)
   const stepNo = cur ? m.steps.indexOf(cur) + 1 : Math.min(m.steps.length, doneSteps.length + 1)
-  return { pct, elapsed, leftMs, isRough, stepNo, total: m.steps.length }
+  const isOver = !m.isFinished && cur !== undefined && spent > pace * cur.size
+  return { pct, elapsed, leftMs, isRough, isOver, stepNo, total: m.steps.length }
 }
 
 const summary = (m: Mission, p: Progress) => {
@@ -396,12 +399,38 @@ export const register: Register = on => {
     return { result: `Board updated: ${Math.round(p.pct * 100)}%, ${summary(final, p)}.` }
   })
 
-  // The working row ("Working…" on the desktop) carries the progress while Claude works.
+  // The working row ("Working…" on the desktop) carries the progress while Claude
+  // works. The desktop draws an animated, colored row (hooks/row.tsx, on its own
+  // frame clock); elsewhere the row's text is rewritten. Named `Client` with a
+  // literal module path: the engine finds the row's module by reading this source.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
     await read($, summaryRef)
     const m = await read($, mission)
     if (!m || m.isFinished || m.runningSince === null || e.props.message !== null) return next(e)
     const p = progress(m, await $.clock.now())
+    const elements = $.ui.resolve(e)
+    const Client = 'Client' in elements && e.surface === 'desktop' ? elements.Client : undefined
+    if (Client) {
+      const { Box } = elements
+      // With no "now" line, what the desktop says the step is doing (`Creating notes.md`).
+      const word = e.props.word === 'Working' ? '' : e.props.word
+      const row = {
+        pct: p.pct,
+        steps: m.steps.map(s => s.status),
+        stepNo: p.stepNo,
+        total: p.total,
+        step: m.steps[p.stepNo - 1]?.text ?? '',
+        elapsed: fmt(p.elapsed),
+        left: p.leftMs === null ? null : `${p.isRough ? '≈' : '~'}${fmtLeft(p.leftMs)} left`,
+        pace: p.isRough ? 'rough' : p.isOver ? 'slow' : 'ok',
+        now: m.now || word,
+      }
+      return (
+        <Box flexDirection="row">
+          <Client key="mission:row" module="./row.tsx" width="100%" props={row} />
+        </Box>
+      )
+    }
     const message = `${Math.round(p.pct * 100)}% · ${summary(m, p)}${m.now ? ` — ${m.now}` : ''}`
     return next({ ...e, props: { ...e.props, message } })
   })
