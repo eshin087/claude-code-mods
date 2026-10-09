@@ -2,7 +2,7 @@
 
 **What it does:** your open pull requests in one place, with the Vercel preview link ready to click.
 
-**Where you see it:** the dock's **PRs 2✗** button (count of open PRs; ✗ when one is failing or conflicting) toggles a pane, as does `/prs`. Each of your open PRs in the repos listed in `config.json` (and whichever repo the session is in) shows:
+**Where you see it:** `/prs` toggles a pane. Each of your open PRs in the repos listed in `config.json` (and whichever repo the session is in) shows:
 - number and title (marked if draft)
 - checks: ✓ passing / ✗ failing / … running
 - merge state: mergeable / conflicts with base

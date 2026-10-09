@@ -1,15 +1,15 @@
 # Claude Code mods
 
-Small plugins of function hooks that change how [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) looks and behaves. There's a one-line dock above the prompt, usage bars in the footer, and live task progress, plus a cost and habits coach, next-task suggestions, a PR desk and more. Type `/mods` (or click **M** in the dock) to see every mod, read what it does, and switch it on or off.
+Small plugins of function hooks that change how [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) looks and behaves. There's live task progress on the working row and a slim line above the prompt, your usage limits in the footer, plus a cost and habits coach, next-task suggestions, a PR desk and more. Type `/mods` to see every mod, read what it does, and switch it on or off.
 
 | Mod | What it does | Use it with |
 |---|---|---|
-| mod-hub | The dock (**P N C PR T M ▾**), one hover card, a one-click Background tasks button, the mods page with on/off switches | the dock, `/mods`, `/mods-review` |
-| mission-control | Live plan, % done, time left and a "now" line for long tasks, plus how far off past estimates were | **P**, `/mission` |
-| next-tasks | Three suggested next tasks after longer replies; folds away after 10 s untouched | **N**, `/next` |
-| coach | Cache, context, cost, habits and one "do next", plus architect lessons | **C**, `/coach` |
-| pr-desk | Your open PRs with checks, merge state and preview links | **PR**, `/prs` |
-| usage-meter | 5-hour and weekly usage bars in the footer, always on (reset times in the **C** card) | footer |
+| mod-hub | A slim line above the prompt (the plan's progress while idle, then ✓ done), and the mods page with on/off switches | `/mods`, `/mods-review` |
+| mission-control | Live plan, % done, time left and a "now" line for long tasks, plus how far off past estimates were | working row (**plan ›**), `/mission` |
+| next-tasks | Three suggested next tasks after longer replies; they stay until you pick one, dismiss them or send your next prompt | `/next` |
+| coach | Cache, context, cost, habits and one "do next", plus architect lessons | `/coach` |
+| pr-desk | Your open PRs with checks, merge state and preview links | `/prs` |
+| usage-meter | 5-hour and weekly usage in the footer: `5h 45% · wk 24%`, always on | footer |
 | turn-timer | How long every prompt took, saved in the chat, plus history | `/timings`, `/timings all` |
 | collision-guard | Warns when parallel sessions edit the same file or version | toasts, `/collisions` |
 

@@ -2,7 +2,7 @@
 
 **What it does:** after a longer piece of work, suggests the 3 best next tasks for the project, ready to run with one click.
 
-**Where you see it:** after any turn of 1 minute or more, a small card opens above the dock once, with a blank line between it and the dock:
+**Where you see it:** after any turn of 1 minute or more, a small card opens above the prompt:
 ```
 Next                                   ✕
 [1] Add a seam test for tiles
@@ -11,8 +11,7 @@ Next                                   ✕
 ```
 - **Click the boxed number or the task** to do it: its full instruction goes into your prompt box, or is sent where the app has no box it can fill.
 - **✕** dismisses the suggestions.
-- **Auto-hide:** if you don't answer within **10 seconds**, the card folds into the dock's **N** (amber dot). Click **N** to bring it back, with a fresh 10 seconds each time.
-- It also folds when you send your next prompt. Suggestions expire after 3 of your prompts.
+- **It stays** until you pick a task, click ✕ or send your next prompt. Suggestions still on their way when you send a prompt are dropped: they were for the turn before.
 - **`/next`** asks over the whole conversation instead of the last turn: smarter, any time.
 
 **How it works:**

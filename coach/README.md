@@ -3,7 +3,7 @@
 **What it does:** shows the numbers behind your sessions that drive cost and quality, checks your habits against a normal software lifecycle (SDLC), and teaches one architect-level concept at a time, tied to what you just did. The aim is to carry vibe-coding skill into real engineering work.
 
 **Where you see it:**
-- **C** in the dock (or `/coach`) toggles the panel:
+- **`/coach`** toggles the panel:
   ```
   ● Cache    92%   ━━━━━━━━━━━  reusing context well
   ● Context  41%   ━━━━━━━━━━━  room to spare
@@ -17,7 +17,6 @@
   ```
   - **Colors:** green is good, yellow means watch it, red means act. In the token row, cached tokens are green (cheap), cache-writes yellow and output cyan.
   - **More** adds the lesson's "try next" and "at work" notes (with **Another lesson**) and a Claude Code pro tip (with **Next tip** and links).
-- **Hover C** in the dock for a violet card with the cache and context bars, cost, habits and "do next".
 - **One tip after a turn, only when a rule fires,** as a dim `🎓 Coach · …` row in the chat:
   - committed straight to main
   - cache hit under 50% on a big turn (with the likely cause)

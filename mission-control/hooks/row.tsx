@@ -21,12 +21,14 @@ type State = { frame: number; isHover: boolean }
 
 const FRAME_MS = 80
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-// The spinner's colors, cycled smoothly; the bar runs from the first to the fourth.
-const HUES = ['#22d3ee', '#38bdf8', '#818cf8', '#a78bfa', '#c084fc', '#a78bfa', '#818cf8', '#38bdf8']
+// The spinner's colors (cyan to teal, the dock's Plan color), cycled smoothly;
+// the bar runs from the first to the fourth.
+const HUES = ['#22d3ee', '#38bdf8', '#67e8f9', '#2dd4bf', '#5eead4', '#2dd4bf', '#67e8f9', '#38bdf8']
 const BAR_CELLS = 6
 const TRACK = '#3f3f46'
 const GLINT = '#f0f9ff'
-const VIOLET = '#a78bfa'
+const ACCENT = '#22d3ee'
+const ACCENT_HOVER = '#a5f3fc'
 const PACE = { ok: '#4ade80', slow: '#facc15', rough: '#9ca3af' } as const
 
 const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
@@ -63,7 +65,7 @@ const Row: ClientModule<Props, State> = (props, surface) => {
     if (isHover !== now.isHover) surface.setState({ ...now, isHover })
   })
 
-  // Full cells shade cyan to violet with a glint sweeping across them; the
+  // Full cells shade cyan to teal with a glint sweeping across them; the
   // cell being filled pulses; the rest is track.
   const pct = Math.max(0, Math.min(1, props.pct))
   const full = Math.floor(pct * BAR_CELLS)
@@ -90,13 +92,13 @@ const Row: ClientModule<Props, State> = (props, surface) => {
       <Box flexDirection="row" flexShrink={0}>
         {cells}
       </Box>
-      <Text bold color={VIOLET}>{`${props.stepNo}/${props.total}`}</Text>
+      <Text bold color={ACCENT}>{`${props.stepNo}/${props.total}`}</Text>
       <Text color="#71717a">·</Text>
       <Text color="#9ca3af">{props.elapsed}</Text>
       <Text color="#71717a">·</Text>
       <Text color={props.left === null ? PACE.rough : PACE[props.pace]}>{left}</Text>
       <Text color="#71717a">·</Text>
-      <Text color={st.isHover ? '#c4b5fd' : VIOLET} underline={st.isHover}>
+      <Text color={st.isHover ? ACCENT_HOVER : ACCENT} underline={st.isHover}>
         {props.isPlanOpen ? 'hide plan' : 'plan ›'}
       </Text>
     </Box>

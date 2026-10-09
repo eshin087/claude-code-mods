@@ -19,8 +19,8 @@ const isOpen = atom({ plugin: 'mission-control', key: 'isOpen' } as const, false
 
 type PlanInput = {
   title?: string
-  steps?: { text: string; size?: number }[]
-  add?: { text: string; size?: number }[]
+  steps?: unknown[]
+  add?: unknown[]
   start?: number
   done?: number[]
   now?: string
@@ -51,6 +51,7 @@ const DESCRIPTION = [
   'Then call it as you go: `start` with the step number you begin, `done` with step numbers you finished,',
   'and `now`: one plain line (<= 90 chars) on what you are doing or figuring out right now.',
   'Use `add` if the scope grows. Call with `finished: true` when the whole task is complete.',
+  'To update, prefer `start`/`done`; sending `steps` again under the same title restates the plan (each step its `text` and `status`) and keeps its clock.',
   'Keep calls brief; they cost the person nothing and replace a long scroll of updates.',
 ].join(' ')
 
@@ -60,10 +61,14 @@ const SCHEMA = {
     title: { type: 'string', description: 'Short task title. Give it with steps to start a new plan.' },
     steps: {
       type: 'array',
-      description: '3-8 steps. Giving steps starts a new plan.',
+      description: '3-8 steps. Giving steps starts a new plan, or restates the running one under its title.',
       items: {
         type: 'object',
-        properties: { text: { type: 'string' }, size: { type: 'integer', minimum: 1, maximum: 3 } },
+        properties: {
+          text: { type: 'string' },
+          size: { type: 'integer', minimum: 1, maximum: 3 },
+          status: { type: 'string', enum: ['todo', 'doing', 'done'] },
+        },
         required: ['text'],
       },
     },
@@ -113,15 +118,47 @@ const projectOf = (dir: string) => {
   return main.split(/[\\/]/).filter(Boolean).pop() ?? main
 }
 
-const toSteps = (list: { text: string; size?: number }[]): MissionStep[] =>
+// Claude sometimes sends steps in another shape: a `title` instead of `text`,
+// plain strings, a `status` on each. Every step it names is read, so a plan is
+// never emptied by its own wording.
+const STEP_TEXT = ['text', 'title', 'content', 'name', 'step'] as const
+
+const parseStep = (raw: unknown) => {
+  const s = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const key = STEP_TEXT.find(k => typeof s[k] === 'string' && (s[k] as string).trim() !== '')
+  const text = typeof raw === 'string' ? raw : key ? (s[key] as string) : ''
+  const size = Number(s.size)
+  const status = String(s.status ?? '').toLowerCase().replace(/[\s_-]/g, '')
+  return {
+    text: oneLine(text, 80),
+    size: Number.isFinite(size) && size > 0 ? Math.min(3, Math.max(1, Math.round(size))) : null,
+    status: /^(done|complete|completed|finished)$/.test(status)
+      ? ('done' as const)
+      : /^(doing|inprogress|active|running|started|current)$/.test(status)
+        ? ('doing' as const)
+        : /^(todo|pending|notstarted|open)$/.test(status)
+          ? ('todo' as const)
+          : null,
+  }
+}
+
+// `old`: the plan being restated, whose steps keep their size and times when the text matches.
+const toSteps = (list: unknown[], old: MissionStep[] = []): MissionStep[] =>
   list
-    .filter(s => typeof s?.text === 'string' && s.text.trim() !== '')
+    .map(parseStep)
+    .filter(p => p.text !== '')
     .slice(0, 12)
-    .map(s => ({
-      text: oneLine(s.text, 80),
-      size: Math.min(3, Math.max(1, Math.round(Number(s.size) || 1))),
-      status: 'todo' as const,
-    }))
+    .map(p => {
+      const prev = old.find(o => o.text === p.text)
+      const status = p.status ?? prev?.status ?? 'todo'
+      return {
+        text: p.text,
+        size: p.size ?? prev?.size ?? 1,
+        status,
+        ...(status !== 'todo' && prev?.startActive !== undefined ? { startActive: prev.startActive } : {}),
+        ...(status === 'done' && prev?.status === 'done' && prev.doneActive !== undefined ? { doneActive: prev.doneActive } : {}),
+      }
+    })
 
 const activeAt = (m: Mission, now: number) => m.activeMs + (m.runningSince === null ? 0 : now - m.runningSince)
 
@@ -231,7 +268,8 @@ const saveRecord = async ($: EngineInterface, m: Mission) => {
 // What the dock shows; written on every change and once a second while running.
 const publish = async ($: EngineInterface) => {
   const m = await read($, mission)
-  if (!m) {
+  // A board with no steps (left by an older version) shows nothing until Claude posts its plan.
+  if (!m || m.steps.length === 0) {
     if ((await read($, summaryRef)) !== null) await update($, summaryRef, () => null)
     return
   }
@@ -326,21 +364,31 @@ export const register: Register = on => {
     let m = await read($, mission)
 
     if (Array.isArray(input.steps) && input.steps.length > 0) {
-      const project = projectOf(await $.session.cwd())
-      const records = await loadRecords($).catch(() => [])
-      m = {
-        id: String(now),
-        title: oneLine(input.title ?? 'Current task', 60),
-        project,
-        steps: toSteps(input.steps),
-        now: '',
-        notes: [],
-        activeMs: 0,
-        runningSince: now,
-        isFinished: false,
-        calibration: calibrationFor(records, project),
-        estimates: [],
-        accuracy: accuracyOf(records, project),
+      const title = oneLine(input.title ?? 'Current task', 60)
+      const parsed = input.steps.map(parseStep).filter(p => p.text !== '')
+      // Nothing readable in the list: the board stays as it was.
+      if (parsed.length === 0) return { result: 'Nothing changed: give each step its words in `text`, e.g. { "text": "Fix the parser", "size": 2 }.' }
+      // The running plan sent again (same title, or steps carrying a status):
+      // the new list replaces its steps, and it keeps its clock and trail.
+      if (m && !m.isFinished && (title === m.title || parsed.some(p => p.status !== null))) {
+        m = { ...m, title, steps: toSteps(input.steps, m.steps) }
+      } else {
+        const project = projectOf(await $.session.cwd())
+        const records = await loadRecords($).catch(() => [])
+        m = {
+          id: String(now),
+          title,
+          project,
+          steps: toSteps(input.steps),
+          now: '',
+          notes: [],
+          activeMs: 0,
+          runningSince: now,
+          isFinished: false,
+          calibration: calibrationFor(records, project),
+          estimates: [],
+          accuracy: accuracyOf(records, project),
+        }
       }
     }
     if (!m) return { result: 'No plan yet: call again with a title and steps.' }
@@ -361,6 +409,11 @@ export const register: Register = on => {
       })
       const s = steps[k]
       if (s && s.status !== 'done') Object.assign(s, { status: 'doing', startActive: t })
+    }
+    // Steps that arrived already done or under way (a restated list) count from now.
+    for (const s of steps) {
+      if (s.status !== 'todo') s.startActive ??= t
+      if (s.status === 'done') s.doneActive ??= t
     }
 
     let upd: Mission = {
@@ -407,7 +460,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
     await read($, summaryRef)
     const m = await read($, mission)
-    if (!m || m.isFinished || m.runningSince === null || e.props.message !== null) return next(e)
+    if (!m || m.isFinished || m.runningSince === null || m.steps.length === 0 || e.props.message !== null) return next(e)
     const p = progress(m, await $.clock.now())
     const elements = $.ui.resolve(e)
     const Client = 'Client' in elements && e.surface === 'desktop' ? elements.Client : undefined

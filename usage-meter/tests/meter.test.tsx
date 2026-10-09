@@ -1,4 +1,4 @@
-// Usage meter: colored bars in the footer's mode slot, plain-text fallback.
+// Usage meter: `5h 38% · wk 18%` in the footer's mode slot, plain-text fallback.
 // `claude plugin test` here.
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -53,59 +53,50 @@ const texts = (n: unknown, out: Node[] = []): Node[] => {
   return out
 }
 const textOf = (n: Node) => (n.children ?? []).filter(c => typeof c === 'string').join('')
+// A % as drawn: `{n}%` in JSX is the number and the sign as two children.
+const PCT = (n: number) => new RegExp(`[^0-9]${n}%`)
 
-test('[terminal] the footer shows a cyan 5h bar, a violet W bar, the reset time and a small level dot', async ($, on) => {
-  world(on)
-  await $.session.start({ cwd: 'C:/x', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
-  const all = texts(await ui.drawn())
-  const find = (s: string) => all.find(t => textOf(t) === s)
-  expect(find('•')?.props?.color).toBe('success')
-  expect(find('5h')?.props?.color).toBe('#22d3ee')
-  expect(find('W')?.props?.color).toBe('#a78bfa')
-  const bars = all.filter(t => /^[━╸]+$/.test(textOf(t))).map(t => `${textOf(t)}:${t.props?.color}`)
-  expect(bars).toEqual(['━━━━:#22d3ee', '━━━━━━:#3f3f46', '━:#a78bfa', '━━━━━:#3f3f46'])
-  expect(find('⟳2h10m')).toBeDefined()
-})
+// Each window's % and its color, in order.
+const shown = (all: Node[]) => all.filter(t => /^\d+%$/.test(textOf(t))).map(t => `${textOf(t)}:${t.props?.color}`)
 
-test('[desktop] the footer is one plain 145px SVG: solid bars filled to the %, colors, reset times in its alt text', async ($, on) => {
+test('[desktop] the footer is just "5h 38% · wk 18%": grey labels, each % green, amber or red by how full it is; text, no picture, no purple', async ($, on) => {
   world(on)
   await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] } })
-  const svgs: Node[] = []
-  const walk = (n: unknown) => {
-    if (n && typeof n === 'object') {
-      if ((n as Node).type === 'Svg') svgs.push(n as Node)
-      for (const c of (n as Node).children ?? []) walk(c)
-    }
-  }
-  walk(await ui.drawn())
-  expect(svgs.length).toBe(1)
-  const svg = svgs[0]!.props!
-  expect(svg.width).toBe(145)
-  // Plain: the footer slot draws no interactive (framed) SVG, which is why the meter went missing.
-  expect(svg.isInteractive).toBeUndefined()
-  const source = String(svg.source)
-  // One continuous track per bar, and a fill rect drawn over it in the window's color.
-  expect(source).toMatch(/<rect x="24" y="4.5" width="34" height="5" rx="2.5" fill="#3f3f46"\/><rect x="24" y="4.5" width="13" height="5" rx="2.5" fill="#22d3ee"\/>/)
-  expect(source).toMatch(/<rect x="97" y="4.5" width="20" height="5" rx="2.5" fill="#3f3f46"\/><rect x="97" y="4.5" width="5" height="5" rx="2.5" fill="#a78bfa"\/>/)
-  expect(source).toMatch(/>38%</)
-  expect(source).toMatch(/>18%</)
-  expect(source).not.toMatch(/<title>/)
-  expect(svg.alt).toMatch(/5-hour window: 38% used, resets in 2h10m\. Weekly: 18% used/)
+  const drawn = await ui.drawn()
+  const all = texts(drawn)
+  expect(all.map(textOf)).toEqual(['5h', '38%', '·', 'wk', '18%'])
+  expect(all.find(t => textOf(t) === '5h')?.props?.dimColor).toBe(true)
+  expect(all.find(t => textOf(t) === 'wk')?.props?.dimColor).toBe(true)
+  expect(shown(all)).toEqual(['38%:success', '18%:success'])
+  expect(JSON.stringify(drawn)).not.toMatch(/"Svg"|#a78bfa|violet/)
 })
 
-test('the engine’s own mode labels stay, before the bars', async ($, on) => {
+test('[terminal] the same, with the 5-hour reset time', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: 'C:/x', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
+  expect(texts(await ui.drawn()).map(textOf)).toEqual(['5h', '38%', '⟳2h10m', '·', 'wk', '18%'])
+})
+
+test('a % turns amber at 60 and red at 85', async ($, on) => {
+  world(on, [{ kind: 'five_hour', percentUsed: 87 }, { kind: 'seven_day', percentUsed: 64 }])
+  await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] } })
+  expect(shown(texts(await ui.drawn()))).toEqual(['87%:error', '64%:warning'])
+})
+
+test('the engine’s own mode labels stay, before the meter', async ($, on) => {
   world(on)
   await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: ['auto'] } })
   expect(texts(await ui.drawn()).some(t => textOf(t).startsWith('auto'))).toBe(true)
 })
 
-test('until a footer draws the bars, the plain status line carries them; after, it clears', async ($, on) => {
+test('until a footer draws the meter, the plain status line carries it; after, it clears', async ($, on) => {
   const { clock, status } = world(on)
   await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
-  expect(status.text).toBe('• 5h ━── 38% W ╸─ 18%')
+  expect(status.text).toBe('5h 38% · wk 18%')
   await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] } })
   await clock.advance(5_000)
   expect(status.text).toBe(undefined)
@@ -116,8 +107,8 @@ test('a new session shows the last reading at once, until its first reply brings
   await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] } })
   const drawn = JSON.stringify(await ui.drawn())
-  expect(drawn).toMatch(/>38%</)
-  expect(drawn).toMatch(/>18%</)
+  expect(drawn).toMatch(PCT(38))
+  expect(drawn).toMatch(PCT(18))
   expect(store.last).toEqual(LIMITS)
 })
 
@@ -127,8 +118,8 @@ test('a saved 5-hour window that has reset since is not shown (its old % would b
   await $.session.start({ cwd: 'C:/x', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'usage-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] } })
   const drawn = JSON.stringify(await ui.drawn())
-  expect(drawn).not.toMatch(/>91%</)
-  expect(drawn).toMatch(/>18%</)
+  expect(drawn).not.toMatch(PCT(91))
+  expect(drawn).toMatch(PCT(18))
 })
 
 test('a fresh reading is saved for the next session', async ($, on) => {

@@ -274,3 +274,46 @@ test('5e. terminal: the engine keeps its own working line, its text rewritten wi
   expect(await ui.find({ key: 'mission:row' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^\d+% · step 2\/3 · 15s · ~\S+ left$/ })).toBeDefined()
 })
+
+// Claude sometimes restates the plan instead of calling start/done: the same
+// title, each step as { title, status } (seen 15 times in real chats, each one
+// emptying the board to 0/0 before this was handled).
+type Step = { text: string; size: number; status: string }
+const stepsOf = async ($: Engine) => ((await peek($)).mission as { steps: Step[] } | null)?.steps ?? []
+
+test('6a. a restated plan ({ title, status } steps, same title) keeps the board: steps read, statuses kept, clock and sizes kept', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 5_000)
+  const out = await plan($, {
+    title: 'Ship it',
+    steps: [{ title: 'read the code', status: 'done' }, { title: 'wire the row', status: 'in_progress' }, { title: 'test it', status: 'pending' }],
+    now: 'still drawing the bar',
+  })
+  expect(String(out.result)).toMatch(/step 2\/3/)
+  expect((await stepsOf($)).map(s => `${s.text}:${s.status}:${s.size}`)).toEqual(['read the code:done:1', 'wire the row:doing:1', 'test it:todo:1'])
+  // The clock runs on: 10 s of step 1 plus 5 s into step 2.
+  expect((await summary($))?.elapsedMs).toBe(15_000)
+  expect((await summary($))?.now).toBe('still drawing the bar')
+})
+
+test('6b. steps with nothing readable change nothing: the board stays, and Claude is told the shape', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 5_000)
+  const out = await plan($, { title: 'Ship it', steps: [{ label: 'x' }, { status: 'done' }] })
+  expect(String(out.result)).toMatch(/^Nothing changed: give each step its words in `text`/)
+  expect(await summary($)).toMatchObject({ stepNo: 2, total: 3 })
+})
+
+test('6c. plain strings as steps start a plan', { plugins: [PROBE] }, async ($, on) => {
+  world(on)
+  await begin($)
+  await plan($, { title: 'Strings', steps: ['one', 'two', 'three'] })
+  expect(await summary($)).toMatchObject({ title: 'Strings', stepNo: 1, total: 3 })
+})
+
+test('6d. a new title with plain steps still starts a new plan, its clock from zero', { plugins: [PROBE] }, async ($, on) => {
+  const { clock } = world(on)
+  await midTask($, clock, 5_000)
+  await plan($, { title: 'Something else', steps: [{ text: 'a' }, { text: 'b' }] })
+  expect(await summary($)).toMatchObject({ title: 'Something else', stepNo: 1, total: 2, elapsedMs: 0 })
+})
