@@ -19,9 +19,9 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 
 | Mod | File | Tests |
 |---|---|---|
-| mod-hub | `tests/dock.test.tsx` | 15 (terminal buttons, desktop strip and popup, the engine's node never under a positioned Box, T, folding) |
+| mod-hub | `tests/dock.test.tsx` | 16 (terminal buttons, desktop strip and popup, the engine's node never under a positioned Box, T, folding, progress left to the working row) |
 | mod-hub | `tests/onoff.test.tsx` | 8 (turn off and on, a page that's behind, refused at load, moving old stub switches, load order, removed mod folders) |
-| mission-control | `tests/progress.test.tsx` | 12 (progress, done chip, idle time, stale boards, estimate accuracy, the working row and its live thought) |
+| mission-control | `tests/progress.test.tsx` | 11 (progress, done chip, idle time, stale boards, estimate accuracy, the working row and its plan link) |
 | next-tasks | `tests/card.test.tsx` | 11 |
 | coach | `tests/toggle.test.tsx` | 4 |
 | pr-desk | `tests/toggle.test.tsx` | 1 |
@@ -77,12 +77,12 @@ On/off doesn't affect the tests. The hub keeps its switches in `~/.claude/mods-d
 | ✅ | Time stops counting while Claude waits for you | mission-control 4c |
 | ✅ | A task board Claude stops updating clears itself after 2 replies | mission-control 4d |
 | 👀 ☐ | On a long real task the bar visibly creeps forward between steps | manual |
-| ✅ | Desktop working row: the animated row module with %, a 6-cell bar, the step number, time on task, time left and the "now" line typed in; the line is one Text in a one-row box that ends in "…" instead of wrapping | mission-control 5a |
+| ✅ | Desktop working row: the animated row module with %, a 6-cell bar, the step number, time on task, time left and a **plan ›** link; no summary text | mission-control 5a |
 | ✅ | It animates on its own frame clock: the spinner turns and the colors (glint, pulse) move every frame | mission-control 5b |
 | ✅ | A step that runs past its share turns time left amber with *step running long* | mission-control 5c |
-| ✅ | Terminal: the engine's own working line stays, its text rewritten with the progress | mission-control 5d |
-| ✅ | While Claude thinks, the row shows its latest thought from the stream (every piece passed on unchanged); otherwise the now line; a new turn starts with none | mission-control 5e |
-| ✅ | With no now line: what the app says the step is doing, else the step's name | mission-control 5f |
+| ✅ | A click on the row opens the Mission pane (the link then reads *hide plan*); another closes it | mission-control 5d |
+| ✅ | Terminal: the engine's own working line stays, its text rewritten with the progress | mission-control 5e |
+| ✅ | While a turn runs, the dock leaves the progress to the working row and keeps to its tabs; idle, it shows the progress | dock 4a, 4c |
 | 👀 ☐ | In the app, the row draws in color and animates smoothly, stays on one line, and nothing reports "refused" | manual |
 | ✅ | A finished task scores its time-left guesses (median miss); P shows *Past estimates: off by ~X%*, and the next task starts with it | mission-control 4e |
 

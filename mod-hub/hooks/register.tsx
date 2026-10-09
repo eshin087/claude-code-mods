@@ -573,13 +573,17 @@ export const register: Register = on => {
       </Box>
     )
 
+    // While a turn runs, Mission Control's working row shows the progress just
+    // above, so the dock leaves it out and keeps to its tabs.
+    const showProgress = !!mission && !mission.isFinished && !(e.props.isWorking && isModOn(list, 'mission-control'))
+
     return (
       <Box flexDirection="column" justifyContent="flex-end" minHeight={shown ? cardRows + 1 : undefined}>
         {below}
         <Box key="dock:row" flexDirection="row" gap={1} flexWrap="nowrap" alignItems="center" position="relative">
           {popup}
           <Box key="dock:status" flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden" alignItems="center">
-            {mission && !mission.isFinished && (
+            {showProgress && mission && (
               <Box key="dock:progress" flexDirection="row" gap={1} flexShrink={0} alignItems="center">
                 <Text color={ACCENT.plan}>◎</Text>
                 {meter(mission.pct, 10, ACCENT.plan)}
@@ -590,7 +594,7 @@ export const register: Register = on => {
                 </Text>
               </Box>
             )}
-            {mission && !mission.isFinished && mission.now !== '' && (
+            {showProgress && mission && mission.now !== '' && (
               <Box key="dock:now" flexShrink={1} minWidth={0}>
                 <Text dimColor wrap="truncate-end">
                   {mission.now}

@@ -45,6 +45,6 @@ export type MissionSummary = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'mission-control': { mission: Mission | null; summary: MissionSummary | null; isOpen: boolean; thought: string | null }
+    'mission-control': { mission: Mission | null; summary: MissionSummary | null; isOpen: boolean }
   }
 }

@@ -342,7 +342,7 @@ for (const surface of SURFACES) {
   test(`[${surface}] 3a. the dock is one row: status shrinks and truncates, buttons never wrap`, { plugins: PEERS }, async ($, on) => {
     world(on)
     await $.session.start({ cwd: 'C:/x/gcdAtlas', surface, isInteractive: true })
-    const ui = await $.ui.mount({ plugin: 'mod-hub', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 60 } })
+    const ui = await $.ui.mount({ plugin: 'mod-hub', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, isWorking: false, bodyColumns: 60 } })
     const status = await ui.find({ key: 'dock:status' })
     const buttons = await ui.find({ key: 'dock:buttons' })
     expect(status?.props.flexDirection).toBe('row')
@@ -395,11 +395,20 @@ test('3d. folding writes the choice to the store, unfolding clears it', { plugin
   expect(store.collapsed).toBe(false)
 })
 
-test('4a. the dock shows the running task, then a done chip', { plugins: PEERS }, async ($, on) => {
+test('4a. the dock shows the running task while Claude is idle, then a done chip', { plugins: PEERS }, async ($, on) => {
   world(on)
   await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: BAND_PROPS })
+  const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND_PROPS, isWorking: false } })
   expect(await ui.find({ type: 'Text', text: '64%' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /^3\/5/ }))?.text).toMatch(/^3\/5 · ~8m$/)
   expect(await ui.find({ type: 'Text', text: /wiring the tile streamer/ })).toBeDefined()
+})
+
+test('4c. while a turn runs, the dock leaves the progress to the working row and keeps to its tabs', { plugins: PEERS }, async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: 'C:/x/gcdAtlas', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'mod-hub', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND_PROPS, isWorking: true } })
+  expect(await ui.find({ key: 'dock:progress' })).toBeUndefined()
+  expect(await ui.find({ key: 'dock:now' })).toBeUndefined()
+  expect(await ui.find({ key: 'dock:tabs' })).toBeDefined()
 })

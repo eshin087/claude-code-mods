@@ -16,11 +16,6 @@ const DEFAULT_MS_PER_UNIT = 120_000
 const mission = atom({ plugin: 'mission-control', key: 'mission' } as const, null)
 const summaryRef = atom({ plugin: 'mission-control', key: 'summary' } as const, null)
 const isOpen = atom({ plugin: 'mission-control', key: 'isOpen' } as const, false)
-// Claude's latest thought this turn, for the working row; null until it thinks.
-const thought = atom({ plugin: 'mission-control', key: 'thought' } as const, null)
-// The longest thought shown, and how often it may change while streaming.
-const THOUGHT_MAX = 90
-const THOUGHT_EVERY_MS = 250
 
 type PlanInput = {
   title?: string
@@ -106,15 +101,6 @@ const fmtLeft = (ms: number) => {
   if (m < 1) return '<1m'
   if (m < 60) return `${m}m`
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
-}
-
-// The sentence Claude is thinking now, or the one it just finished while the
-// new one has barely begun; a long one keeps its newest end.
-const latestThought = (text: string) => {
-  const parts = text.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/).filter(Boolean)
-  let last = parts.pop() ?? ''
-  if (last.length < 25 && parts.length > 0) last = `${parts.pop()} ${last}`
-  return last.length > THOUGHT_MAX ? `…${last.slice(-(THOUGHT_MAX - 1)).replace(/^\S*\s+/, '')}` : last
 }
 
 const bar = (pct: number, width: number) => {
@@ -310,34 +296,8 @@ export const register: Register = on => {
     return next({ ...e, context: [...(e.context ?? []), note] })
   })
 
-  // Claude's thinking as it streams (what the person sees of it live), kept as
-  // its latest sentence for the working row. Every piece passes on untouched.
-  on('turn.step', async function* ($, e, next) {
-    if (e.agentId !== undefined) return yield* next(e)
-    let text = ''
-    let shown = ''
-    let shownAt = 0
-    const show = async (isLast: boolean) => {
-      const latest = latestThought(text)
-      const now = await $.clock.now()
-      if (latest === '' || latest === shown || (!isLast && now - shownAt < THOUGHT_EVERY_MS)) return
-      shown = latest
-      shownAt = now
-      await update($, thought, () => latest)
-    }
-    for await (const chunk of next(e)) {
-      if (chunk.kind === 'thinking') {
-        text = (text + chunk.text).slice(-2000)
-        await show(false).catch(() => undefined)
-      }
-      yield chunk
-    }
-    await show(true).catch(() => undefined)
-  })
-
   on('turn.start', async ($, e, next) => {
     touched = false
-    await update($, thought, () => null)
     const now = await $.clock.now()
     await update($, mission, m => (m && !m.isFinished && m.runningSince === null ? { ...m, runningSince: now } : m))
     await publish($)
@@ -440,31 +400,19 @@ export const register: Register = on => {
   })
 
   // The working row ("Working…" on the desktop) carries the progress while Claude
-  // works. The desktop draws an animated, colored row (hooks/row.tsx, on its own
-  // frame clock); elsewhere the row's text is rewritten. Named `Client` with a
+  // works (the dock leaves its own progress out meanwhile). The desktop draws an
+  // animated, colored row with a "plan ›" link (hooks/row.tsx, on its own frame
+  // clock); elsewhere the row's text is rewritten. Named `Client` with a
   // literal module path: the engine finds the row's module by reading this source.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
     await read($, summaryRef)
     const m = await read($, mission)
     if (!m || m.isFinished || m.runningSince === null || e.props.message !== null) return next(e)
     const p = progress(m, await $.clock.now())
-    // What is going on, most telling first: Claude's latest thought while it
-    // thinks, else the "now" line it wrote for you.
-    const latest = await read($, thought)
-    const isThinking = e.props.mode === 'thinking' && latest !== null
     const elements = $.ui.resolve(e)
     const Client = 'Client' in elements && e.surface === 'desktop' ? elements.Client : undefined
     if (Client) {
       const { Box } = elements
-      // Then what the desktop says the step is doing (`Creating notes.md`), then the step's name.
-      const word = e.props.word === 'Working' ? '' : e.props.word
-      const [text, kind] = isThinking
-        ? [latest, 'thought']
-        : m.now
-          ? [m.now, 'now']
-          : word
-            ? [word, 'app']
-            : [m.steps[p.stepNo - 1]?.text ?? '', 'step']
       const row = {
         pct: p.pct,
         stepNo: p.stepNo,
@@ -472,8 +420,7 @@ export const register: Register = on => {
         elapsed: fmt(p.elapsed),
         left: p.leftMs === null ? null : `${p.isRough ? '≈' : '~'}${fmtLeft(p.leftMs)} left`,
         pace: p.isRough ? 'rough' : p.isOver ? 'slow' : 'ok',
-        text,
-        kind,
+        isPlanOpen: await read($, isOpen),
       }
       return (
         <Box flexDirection="row">
@@ -481,9 +428,15 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const line = isThinking ? latest : m.now
-    const message = `${Math.round(p.pct * 100)}% · ${summary(m, p)}${line ? ` — ${line}` : ''}`
+    const message = `${Math.round(p.pct * 100)}% · ${summary(m, p)}`
     return next({ ...e, props: { ...e.props, message } })
+  })
+
+  // A click on the working row's "plan ›" toggles the Mission pane.
+  on('ui.message', { component: 'Spinner' }, async ($, e, next) => {
+    if (e.element !== 'mission:row') return next(e)
+    if ((e.data as { open?: unknown } | null)?.open === 'plan') await togglePane($)
+    return {}
   })
 
   on('command.run', { command: 'mission' }, async $ => ({ text: await togglePane($) }))
