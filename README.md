@@ -1,23 +1,19 @@
 # Claude Code mods
 
-Small plugins of function hooks that change how [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) looks and behaves. There's live task progress on the working row and a slim line above the prompt, your usage limits in the footer, plus a cost and habits coach, next-task suggestions, a PR desk and more. Type `/mods` to see every mod, read what it does, and switch it on or off.
+Small plugins of function hooks for [Claude Code](https://docs.claude.com/en/docs/claude-code/overview): a hub to see and switch them, two about your plan's usage limits (so you never need the usage button), one that times every prompt, and two that help you keep track of many chats at once. Type `/mods` to see every mod and switch it on or off.
 
 | Mod | What it does | Use it with |
 |---|---|---|
-| mod-hub | A slim line above the prompt (the plan's progress while idle, then ✓ done), and the mods page with on/off switches | `/mods`, `/mods-review` |
-| mission-control | Live plan, % done, time left and a "now" line for long tasks, plus how far off past estimates were | working row (**plan ›**), `/mission` |
-| next-tasks | Three suggested next tasks after longer replies; they stay until you pick one, dismiss them or send your next prompt | `/next` |
-| coach | Cache, context, cost, habits and one "do next", plus architect lessons | `/coach` |
-| pr-desk | Your open PRs with checks, merge state and preview links | `/prs` |
-| usage-meter | 5-hour and weekly usage in the footer: `5h 45% · wk 24%`, always on | footer |
-| turn-timer | How long every prompt took, saved in the chat, plus history | `/timings`, `/timings all` |
-| collision-guard | Warns when parallel sessions edit the same file or version | toasts, `/collisions` |
-
-Each mod's folder has a README with the details.
+| [hub](hub/README.md) | `/mods`: every mod, what it does, and an on/off switch for each (kept on this computer only) | `/mods` |
+| [limits](limits/README.md) | Your 5-hour and weekly limits in the footer next to the model picker, with the time left to the 5-hour reset: `5h 22% 3h27 · w 76%` | footer |
+| [pace](pace/README.md) | What this chat has used (tokens, cost, % of each limit), and when the 5-hour and weekly limits run out at your current pace; a toast warns when one would run out before it resets | `/pace` (and **🔹P** in the terminal's footer) |
+| [inbox](inbox/README.md) | Which of your chats, across every project, are waiting on you: an approval, a question, or your turn after a finished reply | `/inbox` |
+| [askfirst](askfirst/README.md) | A switch that makes Claude ask its clarifying questions before starting a task, so you don't have to say "ask me any questions" every time | `/askfirst` (footer shows "ask first" while on) |
+| [timings](timings/README.md) | How long each prompt took, its tokens and API cost, on the prompt's row and in a history pane with totals; past chats too | a small **🔸** button in the footer, `/timings` |
 
 ## Install
 
-Needs Claude Code 2.1.28x or later (function hooks).
+Needs Claude Code 2.1.299 or later (function hooks).
 
 **Windows** (PowerShell):
 ```powershell
@@ -33,26 +29,24 @@ git clone https://github.com/eshin087/claude-code-mods ~/claude-code-mods
 
 Then start a new Claude Code session, or reopen the app.
 
-**What the install script changes:** it adds three entries to the `env` block of `~/.claude/settings.json`, and backs the file up to `settings.json.bak` first. Everything else is kept.
+**What the install script changes:** it sets three entries in the `env` block of `~/.claude/settings.json`, and backs the file up to `settings.json.bak` first. Everything else is kept.
 
 | Entry | What it does |
 |---|---|
 | `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` | Turns function hooks on. |
 | `CLAUDE_CODE_PLUGIN_DIR_WATCH=1` | Open sessions reload a mod as soon as its files change. |
-| `CLAUDE_CODE_PLUGIN_DIRS` | Every mod folder here, separated by `;` on Windows or `:` elsewhere. `mod-hub` comes first: the hub can only switch off mods that load after it. |
-
-**PR Desk:** copy `pr-desk/config.example.json` to `pr-desk/config.json` and list your repos. That file stays out of git.
+| `CLAUDE_CODE_PLUGIN_DIRS` | Every mod folder here, separated by `;` on Windows or `:` elsewhere. `hub` comes first: it can only switch off mods that load after it. |
 
 ## Keep computers in sync
 
-Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. A mod removed from the repo drops out by itself: the folder goes with the pull, and the hub takes it out of your settings at the next session start. Run the install script again when a new mod folder was added, or when the hub warns that a mod loads before it (installs older than the per-computer switch listed folders alphabetically).
+Run `git pull` in the mods folder. Open sessions reload the changed mods by themselves, and new sessions get them on start. Run the install script again whenever a mod folder is added or removed, so the settings list exactly the folders that are here.
 
-Which mods are on or off is never synced: each computer keeps its own list (see Data).
+**Coming from the first set of mods** (mod-hub, mission-control, coach and the rest)? They're gone from the repo. After pulling, run the install script once: it replaces the old list with `hub`, `limits`, `pace` and `timings`.
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for how to run the automated tests (`claude plugin test <mod>`), the manual checklist, and the bug log.
+See [TESTING.md](TESTING.md) for how to run the automated tests and what to check by hand.
 
 ## Data
 
-Saved history lives in `~/.claude/mods-data/<mod>/` on each computer, and isn't synced. Delete a folder to wipe that mod's history. The hub's on/off switches live there too, in `mod-hub/off.json`.
+Saved data lives in `~/.claude/mods-data/<mod>/` on each computer, and isn't synced: which mods are switched off (`hub/off.json`), the limits readings (with 8 days of history), the pace mod's warnings and each chat's timings. Delete a folder to wipe it.

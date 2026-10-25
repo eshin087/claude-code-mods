@@ -1,0 +1,7 @@
+{
+  "name": "pace",
+  "version": "0.1.0",
+  "description": "/pace: what this chat has used, and when your 5-hour and weekly limits run out at your current pace.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "timings",
+  "version": "0.1.0",
+  "description": "How long each prompt took, with its tokens and API cost, on the prompt's row and in a history pane (T in the footer, /timings) with totals.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

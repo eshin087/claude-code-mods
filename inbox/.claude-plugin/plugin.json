@@ -1,0 +1,6 @@
+{
+  "name": "inbox",
+  "version": "0.1.0",
+  "description": "Which of your chats, across every project on this computer, are waiting on you and why: 📥 in the footer, /inbox for the list, a notification when one starts waiting.",
+  "author": { "name": "eshin087" }
+}

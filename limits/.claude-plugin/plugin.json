@@ -1,0 +1,7 @@
+{
+  "name": "limits",
+  "version": "0.1.0",
+  "description": "Your 5-hour and weekly limits, with when each resets, in the footer next to the model picker.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "hub",
+  "version": "0.1.0",
+  "description": "/mods: every mod in your mods folder, what it does, and an on/off switch for each.",
+  "author": { "name": "eshin087" },
+  "types": "./types/index.d.ts"
+}
