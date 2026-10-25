@@ -1,0 +1,6 @@
+{
+  "name": "askfirst",
+  "version": "0.1.0",
+  "description": "An 'ask me first' switch (/askfirst): while on, Claude asks its clarifying questions before starting any non-trivial task.",
+  "author": { "name": "eshin087" }
+}

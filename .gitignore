@@ -1,15 +1,9 @@
 # Written by Claude Code beside each mod when it loads one (its API types); rebuilt on every load.
 **/.claude-plugin/types/
 
-# Personal settings: PR Desk's repo list and Vercel team. Copy pr-desk/config.example.json.
-pr-desk/config.json
-
 .claude/
 node_modules/
 *.bak
 
 # Local build helpers (type-check config, scratch scripts).
 .dev/
-
-# Stubs older Mod Hub versions wrote to switch a mod off; safe to delete (see mod-hub/README.md).
-**/hooks/off.tsx
